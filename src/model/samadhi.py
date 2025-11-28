@@ -70,45 +70,42 @@ class SamadhiCore(nn.Module):
         閾値(gate_threshold)を超えた場合のみ、その「意図」を採用して初期状態 S0 を生成します。
 
         Args:
-            x_input (torch.Tensor): 入力ベクトル (Shape: [1, dim])
+            x_input (torch.Tensor): 入力ベクトル (Shape: [B, dim])
 
         Returns:
-            s0 (torch.Tensor): 初期化された状態ベクトル。ゲートが閉じた場合はゼロベクトル。
-            metadata (dict): 検索結果のメタデータ（勝者ラベル、確信度、ゲート状態など）。
+            s0 (torch.Tensor): 初期化された状態ベクトル (Shape: [B, dim])。
+            metadata (dict): バッチ内の各アイテムに対応するメタデータ。
+                             各キーはテンソルまたはリストを保持します。
+                             例: {"winner_id": (B,) tensor, "gate_open": (B,) boolean tensor, ...}
         """
-        # 1. 入力の正規化 (振幅を無視し、方向のみで類似度を判定するため)
+        # 1. 入力の正規化 & 共鳴スコアの計算
         x_norm = F.normalize(x_input, p=2, dim=1)
+        raw_scores = torch.matmul(x_norm, self.probes.T)  # (B, n_probes)
 
-        # 2. 共鳴スコアの計算 (Raw Cosine Similarity: -1.0 ~ 1.0)
-        # self.probes は初期化時に正規化済みである前提
-        raw_scores = torch.matmul(x_norm, self.probes.T)
+        # 2. 絶対評価によるゲーティング
+        max_raw_score, winner_idx = torch.max(raw_scores, dim=1)  # (B,), (B,)
+        is_gate_open = max_raw_score > self.config["gate_threshold"]  # (B,)
 
-        # 3. 絶対評価によるゲーティング (Absolute Gating)
-        max_raw_score, winner_idx = torch.max(raw_scores, dim=1)
-        is_gate_open = max_raw_score.item() > self.config["gate_threshold"]
+        # 3. 相対評価による確信度算出 (Softmax with Temperature)
+        w_hat = F.softmax(raw_scores / self.config["softmax_temp"], dim=1)  # (B, n_probes)
+        confidence = w_hat.gather(1, winner_idx.unsqueeze(1)).squeeze(1)  # (B,)
 
-        # 4. 相対評価による確信度算出 (Softmax with Temperature)
-        # 側方抑制を行い、確率分布としての確信度を得る
-        w_hat = F.softmax(raw_scores / self.config["softmax_temp"], dim=1)
-        confidence = w_hat[0, winner_idx].item()
+        # 4. 初期状態 S0 の生成
+        winner_probes = self.probes[winner_idx]  # (B, Dim)
+        s0_resonant = x_input * winner_probes
+        s0 = torch.where(is_gate_open.unsqueeze(1), s0_resonant, torch.zeros_like(x_input))
 
-        # 5. 初期状態 S0 の生成
-        if is_gate_open:
-            winner_probe = self.probes[winner_idx]
-            # 入力そのものではなく、入力とプローブの要素積（共鳴部分）を抽出
-            s0 = x_input * winner_probe
-        else:
-            # 閾値以下のノイズは完全に遮断 (Silence)
-            s0 = torch.zeros_like(x_input)
-            confidence = 0.0
+        # ゲートが閉じたアイテムの確信度を0に設定
+        confidence = torch.where(is_gate_open, confidence, torch.zeros_like(confidence))
 
+        # バッチ対応のメタデータ
         metadata = {
-            "winner_id": winner_idx.item(),
-            "winner_label": self.config["labels"][winner_idx.item()],
-            "confidence": confidence,
-            "raw_score": max_raw_score.item(),
-            "gate_open": is_gate_open,
-            "raw_distribution": w_hat.detach().cpu().numpy(),
+            "winner_id": winner_idx,  # (B,) tensor
+            "winner_label": [self.config["labels"][i.item()] for i in winner_idx],  # List of strings
+            "confidence": confidence,  # (B,) tensor
+            "raw_score": max_raw_score,  # (B,) tensor
+            "gate_open": is_gate_open,  # (B,) boolean tensor
+            "raw_distribution": w_hat.detach().cpu().numpy(),  # (B, n_probes) numpy array
         }
 
         return s0, metadata
@@ -167,9 +164,9 @@ class SamadhiCore(nn.Module):
 
         # 遷移タイプの判定
         if current_log["winner_id"] == prev_log["winner_id"]:
-            trans_type = "Sustain (持続)"
+            trans_type = "Sustain"
         else:
-            trans_type = "Shift (転換)"
+            trans_type = "Shift"
 
         return {
             "from": prev_log["winner_label"],
@@ -183,15 +180,26 @@ class SamadhiCore(nn.Module):
         1タイムステップ分の瞑想プロセス（検索→純化→記録）を実行します。
 
         Args:
-            x_input (torch.Tensor): 入力ベクトル。
+            x_input (torch.Tensor): 入力ベクトル。(Shape: [1, dim])
             step_idx (int): 現在のタイムステップ番号。
 
         Returns:
             Tuple[torch.Tensor, Dict]: 収束した状態と全ログデータのペア。
             ゲートが閉じた場合は None を返します。
         """
-        # 1. Vitakka (Search)
-        s0, probe_log = self.vitakka_search(x_input)
+        # 1. Vitakka (Search) - x_inputは (1, Dim) なので、vitakka_searchの出力も単一アイテム用として処理
+        s0_batch, probe_log_batch = self.vitakka_search(x_input)
+
+        # バッチ出力から単一アイテムのメタデータを抽出
+        probe_log = {
+            "winner_id": probe_log_batch["winner_id"].item(),
+            "winner_label": probe_log_batch["winner_label"][0],
+            "confidence": probe_log_batch["confidence"].item(),
+            "raw_score": probe_log_batch["raw_score"].item(),
+            "gate_open": probe_log_batch["gate_open"].item(),
+            "raw_distribution": probe_log_batch["raw_distribution"][0],
+        }
+        s0 = s0_batch
 
         if not probe_log["gate_open"]:
             # ノイズとして棄却された場合の処理

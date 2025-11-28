@@ -31,7 +31,7 @@ class SamadhiTrainer:
 
     def train_step(self, clean_batch: torch.Tensor, noise_fn: Callable) -> float:
         """
-        1バッチ分の学習ステップを実行 (バッチ処理対応版)
+        1バッチ分の学習ステップを実行
         Args:
             clean_batch: ノイズのない正解データ (Batch, Dim)
             noise_fn: 関数 f(tensor) -> noisy_tensor
@@ -43,8 +43,7 @@ class SamadhiTrainer:
 
         self.optimizer.zero_grad()
 
-        # 2. Forward Pass (Batch対応)
-        # SamadhiCoreのメソッドがバッチ処理をサポートしていることを活用
+        # 2. Forward Pass
         # A. Search (Vitakka)
         s0, _ = self.model.vitakka_search(noisy_batch)
 
@@ -69,7 +68,7 @@ class SamadhiTrainer:
 
         # 安定性Loss: バッチとステップで平均化
         if num_steps > 0:
-            batch_stability_loss /= (len(clean_batch) * num_steps)
+            batch_stability_loss /= len(clean_batch) * num_steps
 
         # 3. Backward
         # 復元誤差 + 安定性ペナルティ
