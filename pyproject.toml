@@ -1,0 +1,21 @@
+[project]
+name = "samadhi-model"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.5",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
+]
+
+[tool.black]
+line-length = 119
+target-version = ['py312']
+include = '\.py$'
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
