@@ -48,7 +48,7 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
         if num_steps > 0:
             for _ in range(num_steps):
                 s_prev = s_t
-                residual = self.model.refiner(s_t)
+                residual = self.model.vicara.refine_step(s_t, metadata)
                 # 慣性更新 (0.7 / 0.3 のバランス)
                 s_t = 0.7 * s_t + 0.3 * residual
 
@@ -116,12 +116,6 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
                 else:
                     # DataLoaderが単一のテンソルを返す場合はエラー（教師ありなので）
                     raise ValueError("DataLoader must return (input, target) pairs for SupervisedSamadhiTrainer.")
-
-                # Flatten対応 (画像 [B, 1, 28, 28] -> [B, 784])
-                if x_batch.dim() > 2:
-                    x_batch = x_batch.view(x_batch.size(0), -1)
-                if y_batch.dim() > 2:
-                    y_batch = y_batch.view(y_batch.size(0), -1)
 
                 loss = self.train_step(x_batch, y_batch)
                 total_loss += loss

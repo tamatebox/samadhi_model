@@ -4,7 +4,7 @@ import torch.nn as nn
 
 # Import components
 from src.components.vitakka import Vitakka
-from src.components.vicara import VicaraBase, StandardVicara, WeightedVicara
+from src.components.vicara import VicaraBase, StandardVicara, WeightedVicara, ProbeVicara
 
 
 class SamadhiModel(nn.Module):
@@ -34,9 +34,15 @@ class SamadhiModel(nn.Module):
         self.history_log: List[Dict] = []
 
     def _build_vicara(self, config: Dict[str, Any]) -> VicaraBase:
-        # Currently we use StandardVicara as default.
-        # Future config can switch to WeightedVicara if needed.
-        return StandardVicara(config)
+        """Select and build Vicara component based on config."""
+        vicara_type = config.get("vicara_type", "standard")
+
+        if vicara_type == "probe_specific":
+            return ProbeVicara(config)
+        elif vicara_type == "weighted":
+            return WeightedVicara(config)
+        else:
+            return StandardVicara(config)
 
     def _build_decoder(self) -> nn.Module:
         """
@@ -56,9 +62,9 @@ class SamadhiModel(nn.Module):
         return self.vitakka.probes
 
     @property
-    def refiner(self):
-        """Access refiner via Vicara (for compatibility)."""
-        return self.vicara.refiner
+    def refiners(self):
+        """Access refiners via Vicara (unified interface)."""
+        return self.vicara.refiners
 
     def forward_step(self, x_input: torch.Tensor, step_idx: int) -> Optional[Tuple[torch.Tensor, Dict]]:
         """

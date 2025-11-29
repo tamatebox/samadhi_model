@@ -45,7 +45,7 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
         if num_steps > 0:
             for _ in range(num_steps):
                 s_prev = s_t
-                residual = self.model.refiner(s_t)
+                residual = self.model.vicara.refine_step(s_t, metadata)
                 # 慣性更新
                 s_t = 0.7 * s_t + 0.3 * residual
 

@@ -20,14 +20,16 @@ class VicaraBase(nn.Module, ABC):
         self.dim = config["dim"]
         self.steps = config["refine_steps"]
 
-        # Refiner Network (The "Phi" loop)
+        # Refiner Networks (The "Phi" loop)
         # S_t -> S_{t+1} (residual)
-        self.refiner = self._build_refiner()
+        # Standardize to ModuleList for all subclasses
+        # Default implementation creates a single refiner
+        self.refiners = nn.ModuleList([self._build_refiner()])
 
     def _build_refiner(self) -> nn.Module:
         """
-        Build the refiner network.
-        Can be overridden by subclasses (e.g. for Latent Refiner with specific architecture).
+        Build a single refiner network.
+        Can be overridden by subclasses.
         """
         return nn.Sequential(
             nn.Linear(self.dim, self.dim // 2),
@@ -89,11 +91,17 @@ class VicaraBase(nn.Module, ABC):
 
         return s_t, trajectory, energies
 
+    def refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
+        """
+        Public API for executing a single refinement step.
+        Delegates to the subclass-specific _refine_step implementation.
+        """
+        return self._refine_step(s_t, context)
+
     @abstractmethod
     def _refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
         """
         1ステップの純化計算。
-        Standardでは単一のRefinerを通すが、Weightedでは複数のRefinerを混ぜるなどの拡張が可能。
         """
         pass
 
@@ -102,30 +110,76 @@ class StandardVicara(VicaraBase):
     """
     Standard Vicāra.
     単一の Refiner ネットワークを使用して純化を行う。
-    Hard Vitakka と組み合わせるのが基本だが、Soft Vitakka と組み合わせても
-    「入り口は曖昧だが、純化のルールは一つ」という構成で動作する。
     """
 
     def _refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
-        return self.refiner(s_t)
+        # Use the single shared refiner
+        return self.refiners[0](s_t)
 
 
 class WeightedVicara(VicaraBase):
     """
     Weighted Vicāra (Optional / Advanced).
-
-    もし 'Phi' (Refiner) 自体を Probe ごとに持ちたい場合や、
-    Probe の確信度に応じて Refiner の挙動を変えたい場合に使用する。
-
-    今回は、設計計画の "Standard" に相当する、共有 Phi を想定しているため、
-    StandardVicara と同じ実装で十分だが、将来的な拡張（Mixture of Experts Refinerなど）
-    のためにクラスを分けておく。
-
-    Current Implementation: Just calls shared refiner (Same as Standard).
     """
 
     def _refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
         # Future extension:
         # if self.multiple_refiners:
         #    return weighted_sum(refiners(s_t), context['probs'])
-        return self.refiner(s_t)
+        return self.refiners[0](s_t)
+
+
+class ProbeVicara(VicaraBase):
+    """
+    Probe-Specific Vicāra.
+    各Probe（概念）ごとに異なるRefiner（純化ロジック）を持つ。
+    """
+
+    def __init__(self, config: Dict[str, Any]):
+        # Base init creates a single refiner in self.refiners
+        super().__init__(config)
+
+        # Override self.refiners with n_probes specific refiners
+        # Note: This discards the one created in super().__init__
+        self.n_probes = config["n_probes"]
+        self.refiners = nn.ModuleList([self._build_refiner() for _ in range(self.n_probes)])
+
+    def _refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
+        mode = self.config.get("attention_mode", "hard")
+
+        if mode == "soft":
+            # Soft Mode: 全Refinerの出力をProbe確率で重み付け加算
+            if "probs" not in context:
+                raise ValueError("ProbeVicara in soft mode requires 'probs' in context.")
+
+            probs = context["probs"]
+            output = torch.zeros_like(s_t)
+
+            for i, refiner in enumerate(self.refiners):
+                # refiner output: (Batch, Dim)
+                # weight: (Batch, 1)
+                w = probs[:, i].unsqueeze(1)
+                output += w * refiner(s_t)
+
+            return output
+
+        else:
+            # Hard Mode: サンプルごとに勝者ProbeのRefinerのみ適用
+            winner_ids = context["winner_id"]
+
+            # Batchサイズ1 または 単一整数の場合 (Inference時など)
+            if isinstance(winner_ids, int):
+                return self.refiners[winner_ids](s_t)
+
+            if winner_ids.dim() == 0:  # 0-d tensor
+                return self.refiners[winner_ids.item()](s_t)
+
+            # Batch処理 (Winnerごとにマスクして適用)
+            output = torch.zeros_like(s_t)
+            # 各Probeについてループし、そのProbeが勝者であるサンプルのみ計算して埋める
+            for i, refiner in enumerate(self.refiners):
+                mask = winner_ids == i
+                if mask.any():
+                    output[mask] = refiner(s_t[mask])
+
+            return output
