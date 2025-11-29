@@ -81,21 +81,19 @@ class BaseSamadhiTrainer:
 
                 data = data.to(self.device)
 
-                # 2. Flatten (画像の場合)
-                if data.dim() > 2:
-                    data = data.view(data.size(0), -1)
-
                 # 3. バッチ内の各サンプルを推論
                 # (forward_sequenceではなく、1つずつ処理してリスト化する)
                 for i in range(len(data)):
-                    x_in = data[i : i + 1]  # (1, Dim)
+                    x_in = data[i : i + 1]  # (1, Dim) or (1, C, H, W)
 
                     # step_idx=0 (ダミー)
                     out = self.model.forward_step(x_in, step_idx=0)
 
                     if out:
                         s_final, log = out
-                        all_results.append(s_final.cpu())  # CPUに戻して保存
+                        # Apply decoder to get the final output (image or vector)
+                        final_output = self.model.decoder(s_final)
+                        all_results.append(final_output.cpu())  # CPUに戻して保存
                         all_logs.append(log)
                     else:
                         # Gate Closed (棄却)

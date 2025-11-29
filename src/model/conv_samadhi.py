@@ -1,4 +1,4 @@
-import torch
+from typing import Dict, Any
 import torch.nn as nn
 from src.model.samadhi import SamadhiModel  # Import SamadhiModel
 
@@ -37,7 +37,6 @@ class ConvSamadhiModel(SamadhiModel):
         Image (C, H, W) -> Latent Vector (Dim)
         """
         return nn.Sequential(
-            nn.Unflatten(1, (self.channels, self.img_size, self.img_size)),
             nn.Conv2d(self.channels, 32, kernel_size=4, stride=2, padding=1),
             nn.LeakyReLU(0.2),
             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
@@ -76,5 +75,4 @@ class ConvSamadhiModel(SamadhiModel):
             nn.ReLU(),
             nn.ConvTranspose2d(32, self.channels, kernel_size=4, stride=2, padding=1),
             nn.Tanh(),
-            nn.Flatten(),
         )
