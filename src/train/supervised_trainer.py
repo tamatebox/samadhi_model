@@ -33,15 +33,11 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
 
         # --- A. Search (Vitakka) ---
         # s0 を取得 (バッチ対応済み前提)
-        s0, _ = self.model.vitakka_search(x)
+        s0, metadata = self.model.vitakka_search(x)
 
         # Entropy Loss用の確率分布計算
         # Vitakka内部と同じ計算を行い、プローブ選択の「迷い」を数値化する
-        x_norm = F.normalize(x, p=2, dim=1)
-        raw_scores = torch.matmul(x_norm, self.model.probes.T)
-        # 温度パラメータもConfigから取得
-        temp = self.model.config.get("softmax_temp", 0.2)
-        probs = F.softmax(raw_scores / temp, dim=1)
+        probs = metadata["probs"]
 
         # --- B. Refine (Vicara) ---
         # 学習用に勾配を維持しながら実行
@@ -60,6 +56,7 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
                 batch_stability_loss += torch.norm(s_t - s_prev, p=2, dim=1).sum()
 
         s_final = s_t
+        decoded_s_final = self.model.decoder(s_final)
 
         # ====================================================
         # 3. Loss Calculation
@@ -67,7 +64,7 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
 
         # (1) 復元誤差 (Reconstruction Loss): 正解に近づいたか
         # 教師あり学習の核心：純化結果がターゲットと一致することを目指す
-        recon_loss = nn.MSELoss()(s_final, y)
+        recon_loss = nn.MSELoss()(decoded_s_final, y)
 
         # (2) 安定性誤差 (Stability Loss): 心が不動になったか
         if num_steps > 0:
@@ -89,14 +86,16 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
 
         return total_loss.item()
 
-    def fit(self, dataloader, epochs: int = 5):
+    def fit(self, dataloader, epochs: int = 5, attention_mode: str = "soft"):
         """
         エポックを回して教師あり学習を実行
         dataloaderは (x, y) のペアを返すことを想定。
         """
         self.model.train()
         # Explicitly set soft attention for training
-        self.model.config["attention_mode"] = "soft"
+        # Vitakka now handles mode switching internally, so no need to rebuild the instance.
+        self.model.config["attention_mode"] = attention_mode
+
         loss_history = []
 
         print(f"\n--- Start Supervised Training ({epochs} epochs) ---")

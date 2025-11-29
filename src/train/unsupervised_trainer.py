@@ -31,13 +31,11 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
 
         # --- A. Search (Vitakka) ---
         # s0 を取得
-        s0, _ = self.model.vitakka_search(x)
+        s0, metadata = self.model.vitakka_search(x)
 
         # Entropy Loss用の確率分布計算
-        x_norm = F.normalize(x, p=2, dim=1)
-        raw_scores = torch.matmul(x_norm, self.model.probes.T)
-        temp = self.model.config.get("softmax_temp", 0.2)
-        probs = F.softmax(raw_scores / temp, dim=1)
+        # Metadataから取得する
+        probs = metadata["probs"]
 
         # --- B. Refine (Vicara) ---
         s_t = s0
@@ -83,13 +81,14 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
 
         return total_loss.item()
 
-    def fit(self, dataloader, epochs: int = 5):
+    def fit(self, dataloader, epochs: int = 5, attention_mode: str = "soft"):
         """
         エポックを回して教師なし学習を実行
         dataloaderは (x) または (x, y) を返すが、xのみを使用する。
         """
         self.model.train()
-        self.model.config["attention_mode"] = "soft"
+        self.model.config["attention_mode"] = attention_mode
+
         loss_history = []
 
         print(f"\n--- Start Unsupervised Training ({epochs} epochs) ---")

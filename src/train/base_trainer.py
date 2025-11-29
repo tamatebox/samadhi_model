@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Tuple
 import torch
 import torch.optim as optim
-from model.samadhi import SamadhiCore
+from model.samadhi import SamadhiModel
 
 
 class BaseSamadhiTrainer:
@@ -10,7 +10,7 @@ class BaseSamadhiTrainer:
     共通の初期化処理、推論ロジック、ユーティリティを提供する。
     """
 
-    def __init__(self, model: SamadhiCore, optimizer: optim.Optimizer, device: Optional[str] = None):
+    def __init__(self, model: SamadhiModel, optimizer: optim.Optimizer, device: Optional[str] = None):
         self.model = model
         self.optimizer = optimizer
 
@@ -62,7 +62,9 @@ class BaseSamadhiTrainer:
         """
         self.model.eval()
         # Explicitly set hard attention for inference
+        # Vitakka now handles mode switching internally, so no need to rebuild the instance.
         self.model.config["attention_mode"] = "hard"
+
         self.model.to(self.device)
 
         all_results = []  # 純化された画像データ
