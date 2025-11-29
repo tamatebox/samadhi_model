@@ -1,7 +1,6 @@
 from typing import Optional
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from src.train.base_trainer import BaseSamadhiTrainer
 
 
@@ -94,6 +93,49 @@ class SupervisedSamadhiTrainer(BaseSamadhiTrainer):
         self.optimizer.step()
 
         return total_loss.item()
+
+    def pretrain_autoencoder(self, dataloader, epochs: int = 3):
+        """
+        Pre-trains the adapter (encoder) and decoder as a standalone autoencoder.
+        This helps to establish a good latent representation and reconstruction capability
+        before introducing the full Samadhi purification dynamics.
+        Args:
+            dataloader: DataLoader providing (input, target, label) pairs.
+            epochs (int): Number of epochs to pre-train.
+        """
+        print(f"\n{'='*20} Starting Autoencoder Pre-training ({epochs} epochs) {'='*20}")
+
+        # Create a separate optimizer for pre-training, targeting only adapter and decoder
+        ae_optimizer = torch.optim.Adam(
+            list(self.model.vitakka.adapter.parameters()) + list(self.model.decoder.parameters()),
+            lr=self.optimizer.param_groups[0]["lr"],  # Use same learning rate as main optimizer
+        )
+        recon_loss_fn = nn.MSELoss()
+
+        for epoch in range(epochs):
+            self.model.train()  # Ensure model is in training mode
+            total_recon_loss = 0.0
+            for batch_idx, (x, y, _) in enumerate(dataloader):
+                x = x.to(self.device)
+                y = y.to(self.device)
+
+                ae_optimizer.zero_grad()
+
+                # Forward pass through encoder and decoder only
+                latent_x = self.model.vitakka.adapter(x)
+                decoded_y = self.model.decoder(latent_x)
+
+                # Calculate only reconstruction loss
+                loss = recon_loss_fn(decoded_y, y)
+                loss.backward()
+                ae_optimizer.step()
+
+                total_recon_loss += loss.item()
+
+            avg_recon_loss = total_recon_loss / len(dataloader)
+            print(f"Pre-train Epoch {epoch+1}/{epochs}, Avg Recon Loss: {avg_recon_loss:.4f}")
+
+        print(f"{'='*20} Autoencoder Pre-training Complete {'='*20}\n")
 
     def fit(self, dataloader, epochs: int = 5):
         """

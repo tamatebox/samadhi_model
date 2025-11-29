@@ -1,22 +1,22 @@
 from typing import Optional
 import torch
-import torch.nn.functional as F
+import torch.nn as nn
 from src.train.base_trainer import BaseSamadhiTrainer
 
 
 class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
     """
     Unsupervised learning trainer for the Samadhi Model.
-    Trains using only input data (x), ignoring target data (y).
-    Minimizes only Stability Loss and Entropy Loss.
-    This allows the model to self-organize "spontaneously stable attractors (concepts)".
+    Trains using only input data (x).
+    Minimizes Reconstruction Loss (Autoencoder), Stability Loss, and Entropy Loss.
+    This allows the model to self-organize "spontaneously stable attractors (concepts)" that can reconstruct the input.
     """
 
     def train_step(self, x: torch.Tensor, y: Optional[torch.Tensor] = None) -> float:
         """
         Executes a single training step for one batch.
         Args:
-            x (torch.Tensor): Input data (Batch, Dim)
+            x (torch.Tensor): Input data (Batch, InputDim)
             y (torch.Tensor, Optional): Ignored.
         """
         x = x.to(self.device)
@@ -33,7 +33,6 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
         s0, metadata = self.model.vitakka_search(x)
 
         # Calculate probability distribution for Entropy Loss
-        # Retrieved from metadata.
         probs = metadata["probs"]
 
         # --- B. Refine (Vicara) ---
@@ -45,17 +44,22 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
             for _ in range(num_steps):
                 s_prev = s_t
                 residual = self.model.vicara.refine_step(s_t, metadata)
-                # Inertial update (Delegates to centralized logic)
+                # Inertial update
                 s_t = self.model.vicara.update_state(s_t, residual)
 
                 # Sum of change amount (L2 norm) for each sample in the batch
                 batch_stability_loss += torch.norm(s_t - s_prev, p=2, dim=1).sum()
 
+        s_final = s_t
+        decoded_s_final = self.model.decoder(s_final)
+
         # ====================================================
         # 3. Loss Calculation
         # ====================================================
 
-        # (1) Reconstruction Loss is not used (as there is no target).
+        # (1) Reconstruction Loss: Can it reproduce the input?
+        # Crucial for Anomaly Detection (Autoencoder-like behavior)
+        recon_loss = nn.MSELoss()(decoded_s_final, x)
 
         # (2) Stability Loss: Has the mind become unmoving?
         if num_steps > 0:
@@ -70,17 +74,68 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
         # --- Total Loss ---
         stability_coeff = self.model.config.get("stability_coeff", 0.01)
         entropy_coeff = self.model.config.get("entropy_coeff", 0.1)
-        balance_coeff = self.model.config.get("balance_coeff", 0.001)  # New coefficient
+        balance_coeff = self.model.config.get("balance_coeff", 0.001)
 
-        # In unsupervised learning, the balance between Stability and Entropy is key.
         total_loss = (
-            (stability_coeff * batch_stability_loss) + (entropy_coeff * entropy_loss) + (balance_coeff * balance_loss)
+            recon_loss
+            + (stability_coeff * batch_stability_loss)
+            + (entropy_coeff * entropy_loss)
+            + (balance_coeff * balance_loss)
         )
 
         total_loss.backward()
         self.optimizer.step()
 
         return total_loss.item()
+
+    def pretrain_autoencoder(self, dataloader, epochs: int = 3):
+        """
+        Pre-trains the adapter (encoder) and decoder as a standalone autoencoder.
+        Args:
+            dataloader: DataLoader providing (x) or (x, y) pairs.
+            epochs (int): Number of epochs to pre-train.
+        """
+        print(f"\n{'='*20} Starting Autoencoder Pre-training ({epochs} epochs) {'='*20}")
+
+        # Target only adapter and decoder
+        ae_optimizer = torch.optim.Adam(
+            list(self.model.vitakka.adapter.parameters()) + list(self.model.decoder.parameters()),
+            lr=self.optimizer.param_groups[0]["lr"],
+        )
+        recon_loss_fn = nn.MSELoss()
+
+        for epoch in range(epochs):
+            self.model.train()
+            total_recon_loss = 0.0
+            count = 0
+
+            for batch_data in dataloader:
+                # Handle tuple/list from dataloader
+                if isinstance(batch_data, list) or isinstance(batch_data, tuple):
+                    x = batch_data[0]
+                else:
+                    x = batch_data
+
+                x = x.to(self.device)
+
+                ae_optimizer.zero_grad()
+
+                # Forward pass through encoder and decoder only
+                latent_x = self.model.vitakka.adapter(x)
+                decoded_x = self.model.decoder(latent_x)
+
+                # Calculate only reconstruction loss (Input vs Reconstructed Input)
+                loss = recon_loss_fn(decoded_x, x)
+                loss.backward()
+                ae_optimizer.step()
+
+                total_recon_loss += loss.item()
+                count += 1
+
+            avg_recon_loss = total_recon_loss / max(count, 1)
+            print(f"Pre-train Epoch {epoch+1}/{epochs}, Avg Recon Loss: {avg_recon_loss:.4f}")
+
+        print(f"{'='*20} Autoencoder Pre-training Complete {'='*20}\n")
 
     def fit(self, dataloader, epochs: int = 5):
         """
@@ -108,10 +163,6 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
                     # y_batch (index 1) is ignored
                 else:
                     x_batch = batch_data
-
-                # Flatten handling
-                if x_batch.dim() > 2:
-                    x_batch = x_batch.view(x_batch.size(0), -1)
 
                 loss = self.train_step(x_batch)  # y is optional
                 total_loss += loss
