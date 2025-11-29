@@ -1,6 +1,6 @@
 from typing import Dict, Any
 import torch.nn as nn
-from src.model.samadhi import SamadhiModel  # Import SamadhiModel
+from src.model.samadhi import SamadhiModel
 
 # Import components if needed for specific configurations, though SamadhiModel handles instantiation
 from src.components.vicara import VicaraBase
