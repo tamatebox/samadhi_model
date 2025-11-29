@@ -72,8 +72,8 @@ class VicaraBase(nn.Module, ABC):
             residual = self._refine_step(s_t, context)
 
             # Inertial Update (EMA)
-            # s_new = 0.7 * s_old + 0.3 * residual
-            s_t = 0.7 * s_t + 0.3 * residual
+            # Delegates to update_state for centralized logic
+            s_t = self.update_state(s_t, residual)
 
             # Compute Energy (Stability)
             # Calculates batch-wise mean energy for simple logging, though individual energies could be kept.
@@ -89,6 +89,14 @@ class VicaraBase(nn.Module, ABC):
                 break
 
         return s_t, trajectory, energies
+
+    def update_state(self, s_t: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
+        """
+        Updates the state using Inertial Update (EMA).
+        s_new = alpha * s_old + (1 - alpha) * residual
+        """
+        alpha = self.config.get("inertia", 0.7)
+        return alpha * s_t + (1 - alpha) * residual
 
     def refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
         """

@@ -45,8 +45,8 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
             for _ in range(num_steps):
                 s_prev = s_t
                 residual = self.model.vicara.refine_step(s_t, metadata)
-                # Inertial update
-                s_t = 0.7 * s_t + 0.3 * residual
+                # Inertial update (Delegates to centralized logic)
+                s_t = self.model.vicara.update_state(s_t, residual)
 
                 # Sum of change amount (L2 norm) for each sample in the batch
                 batch_stability_loss += torch.norm(s_t - s_prev, p=2, dim=1).sum()
@@ -64,16 +64,18 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
         # (3) Entropy Loss: Was the selection made without hesitation?
         entropy_loss = self._compute_entropy(probs)
 
-        # (Optional) Sparsity Loss or Latent Regularization could be added here
-        # to prevent mode collapse (e.g., all inputs mapping to same probe).
-        # For now, we rely on Entropy Loss and diverse input data.
+        # (4) Load Balancing Loss: Promote diverse probe usage
+        balance_loss = self._compute_load_balance_loss(probs)
 
         # --- Total Loss ---
         stability_coeff = self.model.config.get("stability_coeff", 0.01)
         entropy_coeff = self.model.config.get("entropy_coeff", 0.1)
+        balance_coeff = self.model.config.get("balance_coeff", 0.001)  # New coefficient
 
         # In unsupervised learning, the balance between Stability and Entropy is key.
-        total_loss = (stability_coeff * batch_stability_loss) + (entropy_coeff * entropy_loss)
+        total_loss = (
+            (stability_coeff * batch_stability_loss) + (entropy_coeff * entropy_loss) + (balance_coeff * balance_loss)
+        )
 
         total_loss.backward()
         self.optimizer.step()
@@ -93,7 +95,7 @@ class UnsupervisedSamadhiTrainer(BaseSamadhiTrainer):
         print(f"\n--- Start Unsupervised Training ({epochs} epochs) ---")
         print(f"Device: {self.device}")
         print(
-            f"Params: Stability={self.model.config.get('stability_coeff', 0.01)}, Entropy={self.model.config.get('entropy_coeff', 0.1)}"
+            f"Params: Stability={self.model.config.get('stability_coeff', 0.01)}, Entropy={self.model.config.get('entropy_coeff', 0.1)}, Balance={self.model.config.get('balance_coeff', 0.001)}"
         )
 
         for epoch in range(epochs):
