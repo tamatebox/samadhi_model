@@ -2,7 +2,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from train.base_trainer import BaseSamadhiTrainer
+from src.train.base_trainer import BaseSamadhiTrainer
 
 
 class SupervisedSamadhiTrainer(BaseSamadhiTrainer):

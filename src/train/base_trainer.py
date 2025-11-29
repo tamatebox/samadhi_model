@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Tuple
 import torch
 import torch.optim as optim
-from model.samadhi import SamadhiModel
+from src.model.samadhi import SamadhiModel
 
 
 class BaseSamadhiTrainer:

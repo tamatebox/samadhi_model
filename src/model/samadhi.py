@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 
 # Import components
-from components.vitakka import Vitakka
-from components.vicara import VicaraBase, StandardVicara, WeightedVicara
+from src.components.vitakka import Vitakka
+from src.components.vicara import VicaraBase, StandardVicara, WeightedVicara
 
 
 class SamadhiModel(nn.Module):
