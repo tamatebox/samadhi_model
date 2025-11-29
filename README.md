@@ -44,11 +44,15 @@
 ├── data/               # MNIST, Waveform datasets
 ├── docs/               # Theoretical specifications
 ├── src/
-│   ├── model/          # Core Architecture (SamadhiCore)
-│   └── train/          # Generic Trainer (SamadhiTrainer)
-├── test/               # Proof of Concept scripts
-│   ├── test_mnist.py   # Visual Samadhi Demo
-│   └── test_trainer_mnist.py
+│   ├── components/     # Vitakka (Search) and Vicara (Refinement) modules
+│   ├── model/          # Core Architectures (SamadhiCore, ConvSamadhi)
+│   └── train/          # Trainer Implementations (Base, Supervised, Unsupervised)
+├── test/               # Demos and Training Examples
+│   ├── test_minist.py
+│   ├── test_trainer_cbsd68.py
+│   ├── test_trainer_cifar10.py
+│   ├── test_trainer_mnist.py
+│   └── test_unsupervised_mnist.py
 ├── main.py             # Entry point
 └── pyproject.toml      # Project configuration (uv)
 ````
@@ -93,18 +97,25 @@ else:
 
 ### 2\. Run Demos
 
-**Visual Samadhi (MNIST)**
+**Visual Samadhi (MNIST Inference Demo)**
 ノイズだらけの画像から、モデルが「数字の概念」を見出し、鮮明なイメージへ収束させる過程を可視化します。
 
 ```bash
-uv run test/test_mnist.py
+uv run test/test_minist.py
 ```
 
-**Training Demo**
-ランダムなニューラルネットが「純化（Denoising）」を学習していく過程を観察します。
+**Supervised Training Loop (MNIST Denoising)**
+MNISTデータセットを用いた教師あり学習のデモです。ノイズの多い画像から数字の概念を抽出し、純化する過程を学習します。
 
 ```bash
 uv run test/test_trainer_mnist.py
+```
+
+**Unsupervised Training Loop (MNIST Concept Discovery)**
+MNISTデータセットを用いた教師なし学習のデモです。モデルが自律的にデータの背後にある概念（プローブ）を学習します。
+
+```bash
+uv run test/test_unsupervised_mnist.py
 ```
 
 -----
