@@ -29,27 +29,44 @@ class BaseSamadhiTrainer:
         print(f"Trainer initialized on device: {self.device}")
 
     def _compute_entropy(self, probs: torch.Tensor) -> torch.Tensor:
-        """Helper function to compute the entropy of a probability distribution."""
-        # Negative sum of p * log(p). Added 1e-9 for numerical stability to prevent log(0).
-        return -torch.sum(probs * torch.log(probs + 1e-9), dim=1).mean()
+        """
+        Helper function to compute the NORMALIZED entropy of a probability distribution.
+        Returns a value in [0, 1].
+        """
+        # Negative sum of p * log(p). Added 1e-9 for numerical stability.
+        entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1).mean()
+
+        # Normalize by log(n_probes) to range [0, 1]
+        n_probes = self.model.config["n_probes"]
+        # Use a small epsilon to avoid division by zero if n_probes=1
+        if n_probes > 1:
+            max_entropy = torch.log(torch.tensor(n_probes, dtype=torch.float, device=self.device))
+            return entropy / max_entropy
+        else:
+            return entropy
 
     def _compute_load_balance_loss(self, probs: torch.Tensor) -> torch.Tensor:
         """
-        Computes the Load Balancing Loss to prevent Probe Collapse.
+        Computes the NORMALIZED Load Balancing Loss to prevent Probe Collapse.
         Penalizes the variance of the average probe usage across the batch.
-        Aim: Minimize Variance(mean(probs)) -> Uniform Distribution.
+        Returns a value in [0, 1].
         """
         # probs: (Batch, NumProbes)
         # 1. Calculate average usage of each probe in the batch
         mean_usage = probs.mean(dim=0)  # (NumProbes,)
 
         # 2. Calculate variance of usage
-        # We want all probes to be used equally (1/N).
-        # Variance = Mean((x - mu)^2).
-        # Minimizing variance pushes usage towards uniformity.
         balance_loss = mean_usage.var()
 
-        return balance_loss
+        # 3. Normalize by max possible variance
+        # Max variance occurs when one probe has prob 1.0 and others 0.0
+        # Var_max = (K-1)/K^2
+        n_probes = self.model.config["n_probes"]
+        if n_probes > 1:
+            max_variance = (n_probes - 1) / (n_probes**2)
+            return balance_loss / max_variance
+        else:
+            return balance_loss
 
     def train_step(self, x: torch.Tensor, y: Optional[torch.Tensor] = None) -> float:
         """
