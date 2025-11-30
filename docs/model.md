@@ -246,7 +246,10 @@ Samadhi Frameworkは、**学習戦略（Trainer + Objective）**と**デコー�
 | **構造発見 / クラスタリング**<br>(Unsupervised) | `UnsupervisedObjective` | **Identity** | Stability + Entropy + Sparsity<br>(内部状態の安定化のみを追求) |
 | **オートエンコーダ事前学習**<br>(Pre-training) | `AutoencoderObjective` | **Reconstruction** | Reconstruction Loss Only<br>(入力の復元誤差最小化、Vicaraスキップ) |
 | **異常検知**<br>(Anomaly Detection) | `AnomalyObjective` | **Reconstruction** | Recon + Stability + Margin<br>(正常データの復元と異常データの排除) |
-| **教師ありタスク**<br>(分類/回帰) | `SupervisedObjective` | **Classifier** / **Regressor** | CrossEntropy / MSE + Stability<br>(ターゲット予測) |
+| **教師ありタスク**<br>(分類) | `SupervisedClassificationObjective` | **Classifier** | CrossEntropy + Stability<br>(ターゲット予測) |
+| **教師ありタスク**<br>(回帰) | `SupervisedRegressionObjective` | **Regressor** | MSE + Stability<br>(ターゲット予測) |
+| **教師ありタスク**<br>(ロバスト回帰) | `RobustRegressionObjective` | **Regressor** | Huber / L1 + Stability<br>(外れ値に強いターゲット予測) |
+| **意味的類似性学習**<br>(Unsupervised) | `CosineSimilarityObjective` | **Identity** / **Reconstruction** | Cosine Embedding Loss + Stability<br>(入力と再構成の方向性一致) |
 
 *   **Meditation Mode (Unsupervised):** 外界の正解に頼らず、データ内在の構造（Dharma）を見出す。
 *   **Expression Mode (Supervised/Anomaly):** 見出した構造を利用して、外界のタスク（分類、検知）を解く。

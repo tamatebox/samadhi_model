@@ -25,8 +25,10 @@ Before writing code, determine the **Data Type** and **Task Goal**.
 | Data Type | Task Goal | Recommended Model | Recommended Objective (Phase 2) |
 | :--- | :--- | :--- | :--- |
 | **Time Series** | Anomaly Detection | `create_lstm_samadhi` / `create_transformer_samadhi` | `AnomalyObjective` |
-| **Tabular** | Anomaly/Classification | `create_mlp_samadhi` | `AnomalyObjective` / `UnsupervisedObjective` |
-| **Image** | Reconstruction/Gen | `create_conv_samadhi` | `UnsupervisedObjective` |
+| **Tabular** | Anomaly Detection | `create_mlp_samadhi` | `AnomalyObjective` / `UnsupervisedObjective` |
+| **Tabular** | Classification | `create_mlp_samadhi` | `SupervisedClassificationObjective` |
+| **Tabular** | Robust Regression | `create_mlp_samadhi` | `RobustRegressionObjective` |
+| **Image** | Reconstruction/Gen | `create_conv_samadhi` | `UnsupervisedObjective` / `CosineSimilarityObjective` |
 
 ### Step 2: Configuration Strategy
 
@@ -160,7 +162,7 @@ print("Probes initialized.")
 In this phase, we **relax the constraints** to allow fine-tuning and flexibility.
 
   * **Strategy:** Low Stability (allow subtle shifts) + High Balance (prevent collapse).
-  * **Objective:** `AnomalyObjective` or `SupervisedObjective`.
+  * **Objective:** `AnomalyObjective` or `SupervisedRegressionObjective` or `SupervisedClassificationObjective` or `RobustRegressionObjective` or `CosineSimilarityObjective`.
 
 **Implementation (Independent Config):**
 Create a NEW config for Phase 2.
