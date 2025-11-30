@@ -28,11 +28,11 @@ class SamadhiConfig(BaseConfig):
     labels: list = field(default_factory=list)  # Probe labels for logging
 
     # --- Nested Component Configs ---
-    # Defaulting to standard MLP/Reconstruction setup
-    adapter: BaseAdapterConfig = field(default_factory=MlpAdapterConfig)
+    # Defaulting to standard MLP/Reconstruction setup with dummy input_dim for initialization
+    adapter: BaseAdapterConfig = field(default_factory=lambda: MlpAdapterConfig(input_dim=10))
     vitakka: BaseVitakkaConfig = field(default_factory=StandardVitakkaConfig)
     vicara: BaseVicaraConfig = field(default_factory=StandardVicaraConfig)
-    decoder: BaseDecoderConfig = field(default_factory=ReconstructionDecoderConfig)
+    decoder: BaseDecoderConfig = field(default_factory=lambda: ReconstructionDecoderConfig(input_dim=10))
     objective: ObjectiveConfig = field(default_factory=ObjectiveConfig)
 
     @classmethod
