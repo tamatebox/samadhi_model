@@ -69,6 +69,7 @@ class MyCustomObjective(BaseObjective):
 *   **`AutoencoderObjective`**: Standard reconstruction loss. Skips Vitakka and Vicara (often used for pre-training Adapters/Decoders).
 *   **`UnsupervisedObjective`**: The full Samadhi unsupervised learning process. Includes reconstruction loss, stability loss, and entropy regularization for Vitakka probes.
 *   **`SupervisedRegressionObjective`**: Uses `y` labels to guide the latent state formation.
+*   **`AnomalyObjective`**: Extends `UnsupervisedObjective`. Incorporates a margin-based reconstruction loss to explicitly attract normal data to probes and repel anomalous data, in addition to stability, entropy, and load balancing losses.
 
 ---
 
