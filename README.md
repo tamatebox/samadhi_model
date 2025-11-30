@@ -78,6 +78,9 @@ The unique properties of the Samadhi Framework make it suitable for tasks requir
 └── pyproject.toml      # Project configuration (uv)
 ```
 
+### Logging
+The Samadhi Framework utilizes a centralized logging system managed by `src/utils/logger.py`. For consistent logging behavior across the project, please refer to the detailed guidelines and setup instructions in [docs/logging.md](docs/logging.md).
+
 -----
 
 ## ⚡ Quick Start
@@ -101,11 +104,11 @@ from src.presets.tabular import create_mlp_samadhi
 
 # Configuration
 config = {
-    "input_dim": 10, 
-    "dim": 64, 
+    "input_dim": 10,
+    "dim": 64,
     "output_dim": 10,
-    "n_probes": 5, 
-    "refine_steps": 5, 
+    "n_probes": 5,
+    "refine_steps": 5,
     "gate_threshold": 0.5
 }
 
