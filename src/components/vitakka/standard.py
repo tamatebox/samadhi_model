@@ -3,6 +3,9 @@ import torch
 import torch.nn.functional as F
 
 from src.components.vitakka.base import BaseVitakka
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class StandardVitakka(BaseVitakka):
@@ -123,5 +126,14 @@ class StandardVitakka(BaseVitakka):
             "probs": probs,
             "raw_scores": raw_scores,
         }
+
+        # Logging (Debug Level)
+        gate_open_count = (
+            partial_meta["gate_open"].float().sum().item()
+            if isinstance(partial_meta["gate_open"], torch.Tensor)
+            else int(partial_meta["gate_open"])
+        )
+        batch_size = z_adapted.size(0)
+        logger.debug(f"Vitakka Forward: Mode={mode}, Batch={batch_size}, Gates Open={gate_open_count}/{batch_size}")
 
         return s0, metadata

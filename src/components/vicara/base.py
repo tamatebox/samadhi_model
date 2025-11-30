@@ -5,6 +5,9 @@ import torch
 import torch.nn as nn
 
 from src.components.refiners.base import BaseRefiner
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class BaseVicara(nn.Module, ABC):
@@ -46,7 +49,9 @@ class BaseVicara(nn.Module, ABC):
         if not self.training:
             trajectory.append(s_t.detach().cpu().numpy())
 
-        for _ in range(self.steps):
+        logger.debug(f"Vicara Loop Start: Max Steps={self.steps}, Batch={s0.size(0)}")
+
+        for step in range(self.steps):
             s_prev = s_t.clone()
 
             residual = self._refine_step(s_t, context)
@@ -56,10 +61,13 @@ class BaseVicara(nn.Module, ABC):
             energy = dist.mean().item()
             energies.append(energy)
 
+            logger.debug(f"Vicara Step {step+1}/{self.steps}: Energy={energy:.6f}")
+
             if not self.training:
                 trajectory.append(s_t.detach().cpu().numpy())
 
             if not self.training and energy < 1e-4:
+                logger.debug(f"Vicara Converged at Step {step+1}")
                 break
 
         return s_t, trajectory, energies

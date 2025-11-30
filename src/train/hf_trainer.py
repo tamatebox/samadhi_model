@@ -4,6 +4,9 @@ from torch import nn
 from transformers import Trainer
 from transformers.trainer_utils import EvalPrediction
 from src.train.objectives.base_objective import BaseObjective
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SamadhiTrainer(Trainer):
@@ -40,6 +43,7 @@ class SamadhiTrainer(Trainer):
             optimizers=optimizers,
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
+        logger.info(f"Initializing SamadhiTrainer with objective: {objective.__class__.__name__}")
         if objective is None:
             raise ValueError("An 'objective' instance must be provided to SamadhiTrainer.")
         self.objective = objective
@@ -59,16 +63,26 @@ class SamadhiTrainer(Trainer):
             # Try common keys
             x = inputs.get("input_values") or inputs.get("pixel_values") or inputs.get("x")
             y = inputs.get("labels") or inputs.get("y")
+            logger.debug(
+                f"Extracted inputs from dict: x={x.shape if x is not None else None}, y={y.shape if y is not None else None}"
+            )
         else:
             # Fallback if inputs is tuple/list (less common in HF Trainer but possible with custom collator)
             x = inputs[0]
             y = inputs[1] if len(inputs) > 1 else None
+            logger.debug(
+                f"Extracted inputs from tuple/list: x={x.shape if x is not None else None}, y={y.shape if y is not None else None}"
+            )
 
         if x is None:
             # If we can't find 'x' by name, and inputs is a dict, maybe the first value is x?
             # This is risky but a common fallback.
             if isinstance(inputs, dict) and len(inputs) > 0:
                 x = list(inputs.values())[0]
+                if x is None:
+                    logger.warning("Input 'x' could not be extracted from inputs.")
+            else:
+                logger.warning("Input 'x' could not be extracted from inputs (not a dict or empty).")
 
         # Ensure x is on device
         x = x.to(self.args.device)
@@ -76,6 +90,9 @@ class SamadhiTrainer(Trainer):
             y = y.to(self.args.device)
 
         # --- Forward Pass (using SamadhiEngine's dynamic path selection) ---
+        logger.debug(
+            f"Forward pass with run_vitakka={self.objective.needs_vitakka}, run_vicara={self.objective.needs_vicara}"
+        )
         # Assume 'model' passed here is the SamadhiEngine (or compatible) with dynamic forward.
         output_from_decoder, s_final, metadata = model.forward(
             x, run_vitakka=self.objective.needs_vitakka, run_vicara=self.objective.needs_vicara
@@ -94,6 +111,7 @@ class SamadhiTrainer(Trainer):
             metadata=metadata,
             num_refine_steps=num_refine_steps,
         )
+        logger.debug(f"Total loss: {total_loss.item():.4f}, Components: {loss_components}")
 
         # Log custom metrics via self.log() if in the main process (for more detailed logging, requires custom callback)
         # For now, just return loss.

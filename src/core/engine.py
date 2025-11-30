@@ -6,6 +6,9 @@ from src.components.adapters.base import BaseAdapter
 from src.components.decoders.base import BaseDecoder
 from src.components.vitakka.base import BaseVitakka
 from src.components.vicara.base import BaseVicara
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SamadhiEngine(nn.Module):
@@ -61,6 +64,7 @@ class SamadhiEngine(nn.Module):
         if run_vitakka:
             # Vitakka returns (s0, meta)
             s, meta = self.vitakka(z)  # Pass adapted latent state
+            logger.debug(f"Vitakka run: meta keys={list(meta.keys())}")
         else:
             s = z  # Adapter output directly becomes the latent state
 
@@ -71,6 +75,7 @@ class SamadhiEngine(nn.Module):
         elif run_vicara and not run_vitakka:  # If Vitakka is skipped but Vicara is run, use z as s0
             # This case means Vicara is running on raw adapter output. Metadata might be empty.
             s_final, _, _ = self.vicara(s, context={})
+            logger.debug("Vicara run without Vitakka context.")
         else:
             s_final = s  # Vicara skipped, final state is the state before Vicara
 
@@ -111,6 +116,7 @@ class SamadhiEngine(nn.Module):
             if isinstance(is_gate_open, torch.Tensor):
                 is_gate_open = is_gate_open.item()
             if not is_gate_open:
+                logger.info(f"Step {step_idx}: Gate Closed (Input rejected).")
                 return None  # Gate Closed
         else:
             s = z  # Adapter output directly becomes the latent state
@@ -136,6 +142,8 @@ class SamadhiEngine(nn.Module):
             "raw_score": meta.get("raw_score", 1.0),
             "gate_open": is_gate_open if run_vitakka else True,
         }
+
+        logger.debug(f"Step {step_idx}: Winner={probe_log['winner_label']}, Conf={probe_log['confidence'].item():.4f}")
 
         # Skip dynamics if Vitakka was skipped and no meaningful probe_log exists
         dynamics = self._compute_dynamics(probe_log) if run_vitakka else None
