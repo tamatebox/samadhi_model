@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-from typing import Dict, Any, Union
 from src.components.refiners.base import BaseRefiner
 from src.configs.base import BaseConfig
 
@@ -11,7 +10,7 @@ class MlpRefiner(BaseRefiner):
     Phi(s) = Linear -> Norm -> ReLU -> Linear -> Tanh
     """
 
-    def __init__(self, config: Union[Dict[str, Any], BaseConfig]):
+    def __init__(self, config: BaseConfig):
         super().__init__(config)
 
         # Standard bottleneck architecture for purification

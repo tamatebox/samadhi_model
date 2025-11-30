@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
-from typing import Dict, Any, Union
 from src.configs.base import BaseConfig
 
 
@@ -11,7 +10,7 @@ class BaseRefiner(nn.Module, ABC):
     Perform single step of purification: s_t -> residual
     """
 
-    def __init__(self, config: Union[Dict[str, Any], BaseConfig]):
+    def __init__(self, config: BaseConfig):
         super().__init__()
         self.config = config
 
