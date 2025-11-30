@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Union
 import torch
 import torch.nn as nn
+from src.configs.main import SamadhiConfig
 
 
 class BaseObjective(ABC):
@@ -17,7 +18,9 @@ class BaseObjective(ABC):
     needs_vitakka: bool = True
     needs_vicara: bool = True
 
-    def __init__(self, config: Dict[str, Any], device: Optional[str] = None):
+    def __init__(self, config: SamadhiConfig, device: Optional[str] = None):
+        if isinstance(config, dict):
+            config = SamadhiConfig.from_dict(config)
         self.config = config
         self.device = torch.device(device) if device else self._get_default_device()
 
@@ -35,7 +38,7 @@ class BaseObjective(ABC):
         Returns a value in [0, 1].
         """
         entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1).mean()
-        n_probes = self.config["n_probes"]
+        n_probes = self.config.vitakka.n_probes  # Changed config access
         if n_probes > 1:
             max_entropy = torch.log(torch.tensor(n_probes, dtype=torch.float, device=self.device))
             return entropy / max_entropy
@@ -50,7 +53,7 @@ class BaseObjective(ABC):
         """
         mean_usage = probs.mean(dim=0)
         balance_loss = mean_usage.var()
-        n_probes = self.config["n_probes"]
+        n_probes = self.config.vitakka.n_probes  # Changed config access
         if n_probes > 1:
             max_variance = (n_probes - 1) / (n_probes**2)
             return balance_loss / max_variance

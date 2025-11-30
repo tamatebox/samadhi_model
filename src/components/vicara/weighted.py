@@ -4,6 +4,8 @@ import torch.nn as nn
 
 from src.components.vicara.base import BaseVicara
 from src.components.refiners.base import BaseRefiner
+from src.configs.vicara import WeightedVicaraConfig
+from src.configs.factory import create_vicara_config
 
 
 class WeightedVicara(BaseVicara):
@@ -13,7 +15,9 @@ class WeightedVicara(BaseVicara):
     Future extension: support multiple refiners and weighted sum based on attention.
     """
 
-    def __init__(self, config: Dict[str, Any], refiner: BaseRefiner):
+    def __init__(self, config: WeightedVicaraConfig, refiner: BaseRefiner):
+        if isinstance(config, dict):
+            config = create_vicara_config(config)
         super().__init__(config, nn.ModuleList([refiner]))
         # WeightedVicara currently expects a single refiner, passed as a list to the base class
 

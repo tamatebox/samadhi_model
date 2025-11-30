@@ -1,9 +1,11 @@
-from typing import Dict, Any
+from typing import Dict, Any, Union
 import torch
 import torch.nn as nn
 
 from src.components.vicara.base import BaseVicara
 from src.components.refiners.base import BaseRefiner
+from src.configs.vicara import StandardVicaraConfig
+from src.configs.factory import create_vicara_config  # Add import for factory
 
 
 class StandardVicara(BaseVicara):
@@ -12,7 +14,9 @@ class StandardVicara(BaseVicara):
     Performs purification using a single refiner network.
     """
 
-    def __init__(self, config: Dict[str, Any], refiner: BaseRefiner):
+    def __init__(self, config: StandardVicaraConfig, refiner: BaseRefiner):
+        if isinstance(config, dict):
+            config = create_vicara_config(config)
         super().__init__(config, nn.ModuleList([refiner]))
         # StandardVicara expects a single refiner, passed as a list to the base class
 

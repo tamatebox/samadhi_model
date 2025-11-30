@@ -5,6 +5,8 @@ from transformers import Trainer
 from transformers.trainer_utils import EvalPrediction
 from src.train.objectives.base_objective import BaseObjective
 from src.utils.logger import get_logger
+from src.core.engine import SamadhiEngine  # Import SamadhiEngine
+from src.configs.main import SamadhiConfig  # Import SamadhiConfig
 
 logger = get_logger(__name__)
 
@@ -17,7 +19,7 @@ class SamadhiTrainer(Trainer):
 
     def __init__(
         self,
-        model: nn.Module = None,
+        model: SamadhiEngine = None,  # Changed type hint to SamadhiEngine
         args: Any = None,
         data_collator: Optional[Any] = None,
         train_dataset: Optional[Any] = None,
@@ -48,7 +50,11 @@ class SamadhiTrainer(Trainer):
             raise ValueError("An 'objective' instance must be provided to SamadhiTrainer.")
         self.objective = objective
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        # Ensure model has a SamadhiConfig. This should be set by SamadhiBuilder.
+        if not isinstance(model.config, SamadhiConfig):
+            raise TypeError("SamadhiTrainer expects model.config to be an instance of SamadhiConfig.")
+
+    def compute_loss(self, model: SamadhiEngine, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Overridden compute_loss to use Samadhi's Objective component.
         Dynamically controls the forward pass based on objective's needs_vitakka and needs_vicara flags.
@@ -100,7 +106,9 @@ class SamadhiTrainer(Trainer):
 
         # --- Loss Calculation ---
         # num_refine_steps is only relevant if Vicara was run
-        num_refine_steps = model.config.get("refine_steps", 0) if self.objective.needs_vicara else 0
+        num_refine_steps = (
+            model.config.vicara.refine_steps if self.objective.needs_vicara else 0
+        )  # Changed config access
 
         total_loss, loss_components = self.objective.compute_loss(
             x=x,

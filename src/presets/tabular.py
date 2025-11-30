@@ -3,9 +3,10 @@ import torch.nn as nn
 from src.core.builder import SamadhiBuilder
 from src.components.adapters.mlp import MlpAdapter
 from src.components.decoders.reconstruction import ReconstructionDecoder
+from src.configs.main import SamadhiConfig
 
 
-def create_mlp_samadhi(config: Dict[str, Any]) -> nn.Module:
+def create_mlp_samadhi(config: SamadhiConfig) -> nn.Module:
     """
     Creates a standard MLP-based Samadhi model suitable for tabular data.
     Corresponds to the old MlpSamadhiModel.
@@ -14,11 +15,11 @@ def create_mlp_samadhi(config: Dict[str, Any]) -> nn.Module:
     # (Builder handles defaults mostly, but Adapter needs config)
 
     # Instantiate specific components
-    adapter = MlpAdapter(config)
+    adapter = MlpAdapter(config.adapter)
 
     # For now, using ReconstructionDecoder as default for tabular/unsupervised
     # If classification, user might need to change decoder or use a different preset
-    decoder = ReconstructionDecoder(config)
+    decoder = ReconstructionDecoder(config.decoder)
 
     # Build engine
     engine = (

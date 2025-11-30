@@ -7,6 +7,7 @@ from src.components.decoders.base import BaseDecoder
 from src.components.vitakka.base import BaseVitakka
 from src.components.vicara.base import BaseVicara
 from src.utils.logger import get_logger
+from src.configs.main import SamadhiConfig  # Import SamadhiConfig
 
 logger = get_logger(__name__)
 
@@ -25,7 +26,7 @@ class SamadhiEngine(nn.Module):
         vitakka: BaseVitakka,
         vicara: BaseVicara,
         decoder: BaseDecoder,
-        config: Dict[str, Any],
+        config: SamadhiConfig,  # Changed type hint
     ):
         super().__init__()
         self.adapter = adapter
@@ -174,7 +175,7 @@ class SamadhiEngine(nn.Module):
         else:
             trans_type = "Shift"
 
-        labels = self.config.get("labels", [])
+        labels = self.config.labels  # Changed from .get("labels", [])
         curr_label = current_log.get("winner_label", str(current_log["winner_id"]))
         prev_label = prev_log.get("winner_label", str(prev_log["winner_id"]))
 

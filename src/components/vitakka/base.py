@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Any
 import torch
 import torch.nn as nn
+from src.configs.vitakka import BaseVitakkaConfig
+from src.configs.factory import create_vitakka_config
 
 
 class BaseVitakka(nn.Module, ABC):
@@ -12,15 +14,20 @@ class BaseVitakka(nn.Module, ABC):
     This component is responsible for coarse-grained thinking. Handles both Hard and Soft attention modes.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: BaseVitakkaConfig):
         super().__init__()
+
+        if isinstance(config, dict):
+            config = create_vitakka_config(config)
+
         self.config = config
-        self.dim = config["dim"]
-        self.n_probes = config["n_probes"]
+
+        self.dim = self.config.dim
+        self.n_probes = self.config.n_probes
 
         # Probe (Concepts) Definition
         self.probes = nn.Parameter(torch.randn(self.n_probes, self.dim))
-        self.probes.requires_grad = config.get("probe_trainable", True)
+        self.probes.requires_grad = self.config.probe_trainable
         self._normalize_probes()
 
     def _normalize_probes(self):

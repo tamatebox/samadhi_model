@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from typing import Dict, Any
 from src.components.decoders.base import BaseDecoder
+from src.configs.decoders import CnnDecoderConfig
+from src.configs.factory import create_decoder_config
 
 
 class CnnDecoder(BaseDecoder):
@@ -10,10 +12,12 @@ class CnnDecoder(BaseDecoder):
     Converts Latent Vector (Batch, Dim) -> Image (Batch, C, H, W).
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: CnnDecoderConfig):
+        if isinstance(config, dict):
+            config = create_decoder_config(config)
         super().__init__(config)
-        self.channels = config.get("channels", 3)
-        self.img_size = config.get("img_size", 32)
+        self.channels = self.config.channels
+        self.img_size = self.config.img_size
 
         feature_map_size = self.img_size // 16
         hidden_dim = 256 * feature_map_size * feature_map_size

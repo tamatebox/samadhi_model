@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from src.components.adapters.base import BaseAdapter
+from src.configs.adapters import CnnAdapterConfig
+from src.configs.factory import create_adapter_config
 
 
 class CnnAdapter(BaseAdapter):
@@ -10,10 +12,16 @@ class CnnAdapter(BaseAdapter):
     Converts Image (Batch, C, H, W) -> Latent Vector (Batch, Dim).
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: CnnAdapterConfig):
+        if isinstance(config, dict):
+            if "type" not in config:
+                config["type"] = "cnn"
+            config = create_adapter_config(config)
+
         super().__init__(config)
-        self.channels = config.get("channels", 3)
-        self.img_size = config.get("img_size", 32)
+
+        self.channels = self.config.channels
+        self.img_size = self.config.img_size
 
         self.encoder = nn.Sequential(
             nn.Conv2d(self.channels, 32, kernel_size=4, stride=2, padding=1),

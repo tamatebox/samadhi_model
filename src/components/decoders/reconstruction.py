@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch
 from typing import Dict, Any
 from src.components.decoders.base import BaseDecoder
+from src.configs.decoders import ReconstructionDecoderConfig
+from src.configs.factory import create_decoder_config
 
 
 class ReconstructionDecoder(BaseDecoder):
@@ -10,14 +12,15 @@ class ReconstructionDecoder(BaseDecoder):
     Latent Space (dim) -> Output (input_dim).
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: ReconstructionDecoderConfig):
+        if isinstance(config, dict):
+            config = create_decoder_config(config)
         super().__init__(config)
 
-        output_dim = config.get("input_dim")  # Assuming reconstruction target is same as input
-        if output_dim is None:
-            raise ValueError("ReconstructionDecoder requires 'input_dim' in config (target dimension).")
+        output_dim = self.config.input_dim
+        # Note: input_dim in config defaults to 10 if not provided, unlike original which raised Error.
 
-        hidden_dim = config.get("decoder_hidden_dim", config.get("adapter_hidden_dim", 64))
+        hidden_dim = self.config.decoder_hidden_dim
 
         self.net = nn.Sequential(
             nn.Linear(self.dim, hidden_dim),

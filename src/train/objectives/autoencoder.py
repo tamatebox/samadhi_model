@@ -2,6 +2,7 @@ from typing import Dict, Any, Tuple, Optional
 import torch
 import torch.nn as nn
 from src.train.objectives.base_objective import BaseObjective
+from src.configs.main import SamadhiConfig
 
 
 class AutoencoderObjective(BaseObjective):
@@ -13,7 +14,9 @@ class AutoencoderObjective(BaseObjective):
     needs_vitakka: bool = False
     needs_vicara: bool = False
 
-    def __init__(self, config: Dict[str, Any], device: Optional[str] = None):
+    def __init__(self, config: SamadhiConfig, device: Optional[str] = None):
+        if isinstance(config, dict):
+            config = SamadhiConfig.from_dict(config)
         super().__init__(config, device)
         self.recon_loss_fn = nn.MSELoss()
 

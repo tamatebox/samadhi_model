@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 import math
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from src.components.adapters.base import BaseAdapter
+from src.configs.adapters import LstmAdapterConfig, TransformerAdapterConfig
+from src.configs.factory import create_adapter_config
 
 
 class LstmAdapter(BaseAdapter):
@@ -11,15 +13,26 @@ class LstmAdapter(BaseAdapter):
     Input (Batch, Seq_Len, Input_Dim) -> Latent Vector (Batch, Dim).
     """
 
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.input_dim = config.get("input_dim")
-        self.seq_len = config.get("seq_len")
-        self.hidden_dim = config.get("adapter_hidden_dim", 128)
-        self.num_layers = config.get("lstm_layers", 1)
+    def __init__(self, config: LstmAdapterConfig):
+        if isinstance(config, dict):
+            # For LstmAdapter specific initialization from dict, we can rely on create_adapter_config
+            # But create_adapter_config might return MlpAdapterConfig if type is missing.
+            # So we should ensure type is set or use LstmAdapterConfig.from_dict directly if we are sure.
+            # However, utilizing the factory is safer for fallback logic if any.
+            # Here, let's assume if dict is passed to LstmAdapter, it's meant for it.
+            if "type" not in config:
+                config["type"] = "lstm"
+            config = create_adapter_config(config)
 
-        if self.input_dim is None or self.seq_len is None:
-            raise ValueError("Config must contain 'input_dim' and 'seq_len' for LstmAdapter.")
+        super().__init__(config)
+
+        self.input_dim = self.config.input_dim
+        self.seq_len = self.config.seq_len
+        self.hidden_dim = self.config.adapter_hidden_dim
+        self.num_layers = self.config.lstm_layers
+
+        # Config objects usually have defaults, but check if needed logic implies requirements
+        # BaseConfig logic handles basic typing.
 
         self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.num_layers, batch_first=True)
         self.fc = nn.Linear(self.hidden_dim, self.dim)
@@ -56,16 +69,19 @@ class TransformerAdapter(BaseAdapter):
     Uses Transformer Encoder to compress sequence into latent vector.
     """
 
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.input_dim = config.get("input_dim")
-        self.seq_len = config.get("seq_len")
-        self.hidden_dim = config.get("adapter_hidden_dim", 128)
-        self.num_layers = config.get("transformer_layers", 2)
-        self.nhead = config.get("transformer_heads", 4)
+    def __init__(self, config: TransformerAdapterConfig):
+        if isinstance(config, dict):
+            if "type" not in config:
+                config["type"] = "transformer"
+            config = create_adapter_config(config)
 
-        if self.input_dim is None or self.seq_len is None:
-            raise ValueError("Config must contain 'input_dim' and 'seq_len' for TransformerAdapter.")
+        super().__init__(config)
+
+        self.input_dim = self.config.input_dim
+        self.seq_len = self.config.seq_len
+        self.hidden_dim = self.config.adapter_hidden_dim
+        self.num_layers = self.config.transformer_layers
+        self.nhead = self.config.transformer_heads
 
         # Input projection to hidden_dim
         self.input_proj = nn.Linear(self.input_dim, self.hidden_dim)

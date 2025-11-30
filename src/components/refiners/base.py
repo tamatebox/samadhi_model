@@ -1,26 +1,32 @@
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
-from typing import Dict, Any
+from typing import Dict, Any, Union
+from src.configs.base import BaseConfig
 
 
 class BaseRefiner(nn.Module, ABC):
     """
     Base Refiner Interface.
-    Represents the mathematical transformation \\Phi(s_t) used inside Vicara.
+    Perform single step of purification: s_t -> residual
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Union[Dict[str, Any], BaseConfig]):
         super().__init__()
         self.config = config
-        self.dim = config["dim"]
+
+        if isinstance(config, dict):
+            self.dim = config["dim"]
+        else:
+            self.dim = config.dim
 
     @abstractmethod
     def forward(self, s: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            s: Latent state (Batch, Dim)
+            s: Current state (Batch, Dim)
         Returns:
-            residual: Transformation result (Batch, Dim) - usually added to s
+            residual: Proposed update vector (Batch, Dim) OR New State
+            (Usually Refiner predicts residual or next state, handled by Vicara update_state)
         """
         pass

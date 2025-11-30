@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
-from typing import Dict, Any
+from typing import Dict, Any, Union
+from src.configs.adapters import BaseAdapterConfig
+from src.configs.factory import create_adapter_config
 
 
 class BaseAdapter(nn.Module, ABC):
@@ -10,10 +12,16 @@ class BaseAdapter(nn.Module, ABC):
     Responsible for converting raw input into the Samadhi latent space (s0).
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: BaseAdapterConfig):
         super().__init__()
+
+        # Allow legacy dict config
+        if isinstance(config, dict):
+            config = create_adapter_config(config)
+
         self.config = config
-        self.dim = config["dim"]
+
+        self.dim = self.config.dim
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 
 from src.components.refiners.base import BaseRefiner
+from src.configs.vicara import BaseVicaraConfig
+from src.configs.factory import create_vicara_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,11 +20,16 @@ class BaseVicara(nn.Module, ABC):
     This component is responsible for fine-grained thinking.
     """
 
-    def __init__(self, config: Dict[str, Any], refiners: nn.ModuleList[BaseRefiner]):
+    def __init__(self, config: BaseVicaraConfig, refiners: nn.ModuleList[BaseRefiner]):
         super().__init__()
+
+        if isinstance(config, dict):
+            config = create_vicara_config(config)
+
         self.config = config
-        self.dim = config["dim"]
-        self.steps = config["refine_steps"]
+
+        self.dim = self.config.dim
+        self.steps = self.config.refine_steps
         self.refiners = refiners
 
     def forward(
@@ -77,7 +84,7 @@ class BaseVicara(nn.Module, ABC):
         Updates the state using Inertial Update (EMA).
         s_new = alpha * s_old + (1 - alpha) * residual
         """
-        alpha = self.config.get("inertia", 0.7)
+        alpha = self.config.inertia
         return alpha * s_t + (1 - alpha) * residual
 
     @abstractmethod

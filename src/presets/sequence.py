@@ -3,15 +3,16 @@ import torch.nn as nn
 from src.core.builder import SamadhiBuilder
 from src.components.adapters.sequence import LstmAdapter, TransformerAdapter
 from src.components.decoders.sequence import LstmDecoder, SimpleSequenceDecoder
+from src.configs.main import SamadhiConfig
 
 
-def create_lstm_samadhi(config: Dict[str, Any]) -> nn.Module:
+def create_lstm_samadhi(config: SamadhiConfig) -> nn.Module:
     """
     Creates an LSTM-based Samadhi model suitable for time-series/sequential data.
     Corresponds to the old LstmSamadhiModel.
     """
-    adapter = LstmAdapter(config)
-    decoder = LstmDecoder(config)
+    adapter = LstmAdapter(config.adapter)
+    decoder = LstmDecoder(config.decoder)
 
     engine = (
         SamadhiBuilder(config)
@@ -25,14 +26,14 @@ def create_lstm_samadhi(config: Dict[str, Any]) -> nn.Module:
     return engine
 
 
-def create_transformer_samadhi(config: Dict[str, Any]) -> nn.Module:
+def create_transformer_samadhi(config: SamadhiConfig) -> nn.Module:
     """
     Creates a Transformer-based Samadhi model suitable for sequential data.
     Corresponds to the old TransformerSamadhiModel.
     """
-    adapter = TransformerAdapter(config)
+    adapter = TransformerAdapter(config.adapter)
     # Using SimpleSequenceDecoder (MLP) as default, matching old implementation
-    decoder = SimpleSequenceDecoder(config)
+    decoder = SimpleSequenceDecoder(config.decoder)
 
     engine = (
         SamadhiBuilder(config)

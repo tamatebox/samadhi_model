@@ -2,6 +2,7 @@ from typing import Dict, Any, Tuple, Optional
 import torch
 import torch.nn as nn
 from src.train.objectives.base_objective import BaseObjective
+from src.configs.main import SamadhiConfig
 
 
 class UnsupervisedObjective(BaseObjective):
@@ -11,7 +12,9 @@ class UnsupervisedObjective(BaseObjective):
     load balancing losses.
     """
 
-    def __init__(self, config: Dict[str, Any], device: Optional[str] = None):
+    def __init__(self, config: SamadhiConfig, device: Optional[str] = None):
+        if isinstance(config, dict):
+            config = SamadhiConfig.from_dict(config)
         super().__init__(config, device)
         self.recon_loss_fn = nn.MSELoss()
 
@@ -44,9 +47,9 @@ class UnsupervisedObjective(BaseObjective):
         balance_loss = self._compute_load_balance_loss(probs)
 
         # Get coefficients from Config
-        stability_coeff = self.config.get("stability_coeff", 0.01)
-        entropy_coeff = self.config.get("entropy_coeff", 0.1)
-        balance_coeff = self.config.get("balance_coeff", 0.001)
+        stability_coeff = self.config.stability_coeff  # Changed config access
+        entropy_coeff = self.config.entropy_coeff  # Changed config access
+        balance_coeff = self.config.balance_coeff  # Changed config access
 
         total_loss = (
             recon_loss

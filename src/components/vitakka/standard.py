@@ -3,6 +3,8 @@ import torch
 import torch.nn.functional as F
 
 from src.components.vitakka.base import BaseVitakka
+from src.configs.vitakka import StandardVitakkaConfig
+from src.configs.factory import create_vitakka_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -15,7 +17,9 @@ class StandardVitakka(BaseVitakka):
     Handles both Hard and Soft attention modes within this single class.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: StandardVitakkaConfig):
+        if isinstance(config, dict):
+            config = create_vitakka_config(config)
         super().__init__(config)
 
     def _generate_hard_s0(
@@ -24,13 +28,13 @@ class StandardVitakka(BaseVitakka):
         """[Hard Mode] Selects a single winning probe and performs a clear gate decision."""
         # Max Score Selection
         max_raw_score, winner_idx = torch.max(raw_scores, dim=1)
-        is_gate_open = max_raw_score > self.config["gate_threshold"]
+        is_gate_open = max_raw_score > self.config.gate_threshold
 
         # Winner Probe
         winner_probes = self.probes[winner_idx]
 
         # Mix Input & Probe
-        alpha = self.config.get("mix_alpha", 0.5)
+        alpha = self.config.mix_alpha
         s0_candidate = alpha * z_adapted + (1 - alpha) * winner_probes
 
         # Gate Application
@@ -58,13 +62,13 @@ class StandardVitakka(BaseVitakka):
         weighted_probes = torch.matmul(probs, self.probes)
 
         # Mix Input & Weighted Probe
-        alpha = self.config.get("mix_alpha", 0.5)
+        alpha = self.config.mix_alpha
         s0_candidate = alpha * z_adapted + (1 - alpha) * weighted_probes
 
         # Soft Gate Logic (Differentiable)
         # Uses expected score (weighted average score)
         avg_score = torch.sum(raw_scores * probs, dim=1)
-        gate_logits = (avg_score - self.config["gate_threshold"]) * 10.0
+        gate_logits = (avg_score - self.config.gate_threshold) * 10.0
         gate_mask = torch.sigmoid(gate_logits).unsqueeze(1)
 
         s0 = s0_candidate * gate_mask
@@ -77,7 +81,7 @@ class StandardVitakka(BaseVitakka):
         return s0, {
             "winner_id": winner_idx,
             "raw_score": max_raw_score,
-            "gate_open": max_raw_score > self.config["gate_threshold"],  # Logging logic
+            "gate_open": max_raw_score > self.config.gate_threshold,  # Logging logic
             "confidence": confidence,
         }
 
@@ -100,15 +104,15 @@ class StandardVitakka(BaseVitakka):
         raw_scores = torch.matmul(x_norm, self.probes.T)
 
         # 3. Compute Probabilities
-        temp = self.config.get("softmax_temp", 0.2)
+        temp = self.config.softmax_temp
         probs = F.softmax(raw_scores / temp, dim=1)
 
         # 4. Generate S0 (Mode-based switching)
         # Determine mode based on training status
         if self.training:
-            mode = self.config.get("training_attention_mode", "soft")
+            mode = self.config.training_attention_mode
         else:
-            mode = self.config.get("prediction_attention_mode", "hard")
+            mode = self.config.prediction_attention_mode
 
         if mode == "soft":
             s0, partial_meta = self._generate_soft_s0(z_adapted, probs, raw_scores)

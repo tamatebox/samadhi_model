@@ -4,6 +4,8 @@ import torch.nn as nn
 
 from src.components.vicara.base import BaseVicara
 from src.components.refiners.base import BaseRefiner
+from src.configs.vicara import ProbeVicaraConfig
+from src.configs.factory import create_vicara_config
 
 
 class ProbeVicara(BaseVicara):
@@ -12,19 +14,21 @@ class ProbeVicara(BaseVicara):
     Possesses a distinct refiner (purification logic) for each probe (concept).
     """
 
-    def __init__(self, config: Dict[str, Any], refiners: nn.ModuleList[BaseRefiner]):
+    def __init__(self, config: ProbeVicaraConfig, refiners: nn.ModuleList[BaseRefiner]):
+        if isinstance(config, dict):
+            config = create_vicara_config(config)
         # ProbeVicara expects a list of refiners, one for each probe
         super().__init__(config, refiners)
-        self.n_probes = config["n_probes"]
+        self.n_probes = self.config.n_probes
         if len(refiners) != self.n_probes:
             raise ValueError(f"ProbeVicara expects {self.n_probes} refiners, but got {len(refiners)}")
 
     def _refine_step(self, s_t: torch.Tensor, context: Dict[str, Any]) -> torch.Tensor:
         # Determine mode based on training status
         if self.training:
-            mode = self.config.get("training_attention_mode", "soft")
+            mode = self.config.training_attention_mode
         else:
-            mode = self.config.get("prediction_attention_mode", "hard")
+            mode = self.config.prediction_attention_mode
 
         if mode == "soft":
             # Soft Mode: Weighted sum of all refiner outputs based on probe probabilities.
