@@ -77,6 +77,8 @@ def mock_config():
     # Use SamadhiConfig
     config_dict = {
         "dim": 10,
+        "adapter": {"input_dim": 10},
+        "decoder": {"input_dim": 10},
         "objective": {
             "stability_coeff": 0.1,
             "entropy_coeff": 0.1,

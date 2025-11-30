@@ -19,7 +19,7 @@ def test_create_adapter_config_default():
 
 
 def test_create_adapter_config_explicit():
-    data = {"type": "cnn", "img_size": 64}
+    data = {"type": "cnn", "img_size": 64, "channels": 3}
     config = create_adapter_config(data)
     assert isinstance(config, CnnAdapterConfig)
     assert config.img_size == 64

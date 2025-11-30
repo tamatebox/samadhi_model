@@ -15,8 +15,9 @@ def test_samadhi_config_defaults():
 def test_samadhi_config_nested_dict():
     data = {
         "dim": 128,
-        "adapter": {"type": "cnn", "img_size": 32},
+        "adapter": {"type": "cnn", "img_size": 32, "channels": 3},
         "vicara": {"type": "probe_specific", "n_probes": 5},
+        "decoder": {"input_dim": 128},
     }
     config = SamadhiConfig.from_dict(data)
 

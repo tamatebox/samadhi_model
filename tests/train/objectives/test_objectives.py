@@ -19,7 +19,9 @@ def anomaly_mock_config():
             "anomaly_weight": 2.0,  # Specific weight for testing
         }
     )
-    return MockConfig({"n_probes": 5, "refine_steps": 2, "objective": objective_config})  # Nested objective config
+    return MockConfig(
+        {"n_probes": 5, "refine_steps": 2, "objective": objective_config, "input_dim": 10}
+    )  # Nested objective config + input_dim
 
 
 @pytest.fixture
@@ -142,7 +144,14 @@ class MockConfig(dict):
 @pytest.fixture
 def mock_config():
     return MockConfig(
-        {"n_probes": 5, "stability_coeff": 0.1, "entropy_coeff": 0.1, "balance_coeff": 0.1, "refine_steps": 2}
+        {
+            "n_probes": 5,
+            "stability_coeff": 0.1,
+            "entropy_coeff": 0.1,
+            "balance_coeff": 0.1,
+            "refine_steps": 2,
+            "input_dim": 10,
+        }
     )
 
 

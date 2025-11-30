@@ -21,8 +21,8 @@ def test_reconstruction_decoder_forward_pass():
     assert output.shape == (batch_size, config["input_dim"])
 
 
-def test_reconstruction_decoder_defaults_on_missing_input_dim():
-    # Now uses defaults (10)
+def test_reconstruction_decoder_missing_input_dim_raises_error():
+    # input_dim is mandatory, so missing it raises TypeError
     config = {"dim": 32}
-    decoder = ReconstructionDecoder(config)
-    assert decoder.net[-1].out_features == 10
+    with pytest.raises(TypeError):
+        ReconstructionDecoder(config)
