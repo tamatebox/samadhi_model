@@ -1,53 +1,56 @@
 from typing import List, Union
 import torch.nn as nn
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def freeze_components(model: nn.Module, components_to_freeze: Union[List[str], str]):
     """
-    モデルの指定されたコンポーネントのパラメータを凍結します。
+    Freezes the parameters of specified components within a model.
 
     Args:
-        model (nn.Module): 凍結するコンポーネントを含むモデル。
-        components_to_freeze (Union[List[str], str]): 凍結するコンポーネント名のリスト、または単一のコンポーネント名。
-                                                      例: ["adapter", "vitakka", "vicara"]
+        model (nn.Module): The model containing components to freeze.
+        components_to_freeze (Union[List[str], str]): A list of component names or a single component name to freeze.
+                                                      Example: ["adapter", "vitakka", "vicara"]
     """
     if isinstance(components_to_freeze, str):
         components_to_freeze = [components_to_freeze]
 
     for name, module in model.named_children():
         if name in components_to_freeze:
-            print(f"Freezing component: {name}")
+            logger.info(f"Freezing component: {name}")
             for param in module.parameters():
                 param.requires_grad = False
         else:
-            print(f"Keeping component unfrozen: {name}")
+            logger.info(f"Keeping component unfrozen: {name}")
             for param in module.parameters():
                 param.requires_grad = True
 
 
 def unfreeze_components(model: nn.Module, components_to_unfreeze: Union[List[str], str]):
     """
-    モデルの指定されたコンポーネントのパラメータを解凍します。
+    Unfreezes the parameters of specified components within a model.
 
     Args:
-        model (nn.Module): 解凍するコンポーネントを含むモデル。
-        components_to_unfreeze (Union[List[str], str]): 解凍するコンポーネント名のリスト、または単一のコンポーネント名。
+        model (nn.Module): The model containing components to unfreeze.
+        components_to_unfreeze (Union[List[str], str]): A list of component names or a single component name to unfreeze.
     """
     if isinstance(components_to_unfreeze, str):
         components_to_unfreeze = [components_to_unfreeze]
 
     for name, module in model.named_children():
         if name in components_to_unfreeze:
-            print(f"Unfreezing component: {name}")
+            logger.info(f"Unfreezing component: {name}")
             for param in module.parameters():
                 param.requires_grad = True
 
 
 def check_frozen_status(model: nn.Module):
     """
-    モデルの各コンポーネントの凍結状態（requires_grad）を表示します。
+    Displays the frozen status (requires_grad) of each component in the model.
     """
-    print("\n--- Component Freezing Status ---")
+    logger.info("--- Component Freezing Status ---")
     for name, module in model.named_children():
         all_frozen = True
         all_unfrozen = True
@@ -61,11 +64,11 @@ def check_frozen_status(model: nn.Module):
             # For simplicity, we assume all params in a module are either frozen or unfrozen by `freeze_components`.
 
         if not list(module.parameters()):  # Handle modules with no parameters
-            print(f"Component '{name}': No trainable parameters.")
+            logger.info(f"Component '{name}': No trainable parameters.")
         elif all_frozen:
-            print(f"Component '{name}': FROZEN")
+            logger.info(f"Component '{name}': FROZEN")
         elif all_unfrozen:
-            print(f"Component '{name}': UNLOCKED")
+            logger.info(f"Component '{name}': UNLOCKED")
         else:
-            print(f"Component '{name}': MIXED STATE (investigate manually)")
-    print("-------------------------------")
+            logger.warning(f"Component '{name}': MIXED STATE (investigate manually)")
+    logger.info("-------------------------------")
