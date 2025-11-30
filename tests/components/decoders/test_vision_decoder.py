@@ -9,6 +9,7 @@ def cnn_decoder_config():
         "dim": 32,  # Latent dimension
         "channels": 3,
         "img_size": 32,
+        "type": "cnn",  # Explicitly set type
     }
 
 
@@ -35,4 +36,6 @@ def test_cnn_decoder_forward(cnn_decoder_config):
         cnn_decoder_config["img_size"],
     )
     assert output.shape == expected_shape
-    assert torch.all(output >= -1.0) and torch.all(output <= 1.0)  # Due to Tanh activation
+    assert torch.all(output >= -1.0) and torch.all(
+        output <= 1.0
+    )  # Due to Tanh activation if present, or just range check

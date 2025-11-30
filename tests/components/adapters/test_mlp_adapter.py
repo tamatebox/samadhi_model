@@ -24,7 +24,8 @@ def test_mlp_adapter_forward_pass():
     assert torch.all((output >= -1.0) & (output <= 1.0))
 
 
-def test_mlp_adapter_error_on_missing_input_dim():
+def test_mlp_adapter_defaults_on_missing_input_dim():
+    # Now that we use Config objects with defaults, missing input_dim should use default (10)
     config = {"dim": 32}
-    with pytest.raises(ValueError, match="MlpAdapter requires 'input_dim' in config."):
-        MlpAdapter(config)
+    adapter = MlpAdapter(config)
+    assert adapter.input_dim == 10

@@ -5,6 +5,7 @@ import torch.nn as nn
 from transformers import TrainingArguments
 from src.train.hf_trainer import SamadhiTrainer
 from src.train.objectives.unsupervised import UnsupervisedObjective
+from src.configs.main import SamadhiConfig  # Import SamadhiConfig
 
 # --- Mocks ---
 
@@ -41,7 +42,7 @@ class MockModel(nn.Module):
                 "winner_id": -1,
                 "confidence": 1.0,
                 "raw_score": 1.0,
-                "probs": torch.softmax(torch.randn(x.size(0), self.config["n_probes"]), dim=1),
+                "probs": torch.softmax(torch.randn(x.size(0), self.config.vitakka.n_probes), dim=1),
             }
 
         s_final: torch.Tensor
@@ -61,16 +62,11 @@ class MockModel(nn.Module):
     def vitakka_search(self, x):
         batch_size = x.size(0)
         s0 = self.adapter(x)
-        probs = torch.softmax(torch.randn(batch_size, self.config["n_probes"]), dim=1)
+        probs = torch.softmax(torch.randn(batch_size, self.config.vitakka.n_probes), dim=1)
         return s0, {"probs": probs}
 
     def decoder(self, s):
         return self.decoder_layer(s)
-
-
-class MockConfig(dict):
-    def __getattr__(self, name):
-        return self.get(name)
 
 
 # --- Tests ---
@@ -78,9 +74,16 @@ class MockConfig(dict):
 
 @pytest.fixture
 def mock_config():
-    return MockConfig(
-        {"n_probes": 5, "stability_coeff": 0.1, "entropy_coeff": 0.1, "balance_coeff": 0.1, "refine_steps": 2}
-    )
+    # Use SamadhiConfig
+    config_dict = {
+        "dim": 10,
+        "stability_coeff": 0.1,
+        "entropy_coeff": 0.1,
+        "balance_coeff": 0.1,
+        "vitakka": {"n_probes": 5},
+        "vicara": {"refine_steps": 2},
+    }
+    return SamadhiConfig.from_dict(config_dict)
 
 
 def test_hf_trainer_compute_loss(mock_config, tmp_path):

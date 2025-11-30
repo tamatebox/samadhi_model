@@ -11,14 +11,27 @@ from src.components.vicara.base import BaseVicara  # Using abstract Vicara for n
 from src.components.vitakka.standard import StandardVitakka
 from src.components.vicara.standard import StandardVicara
 from src.components.refiners.base import BaseRefiner  # Import BaseRefiner for MockRefiner
+from src.configs.main import SamadhiConfig
+from src.configs.factory import (
+    create_adapter_config,
+    create_decoder_config,
+    create_vitakka_config,
+    create_vicara_config,
+)
 
 
 # Mock implementations for abstract classes
 class MockAdapter(BaseAdapter):
 
     def __init__(self, config):
+        # Allow legacy dict config for flexibility in tests
+        if isinstance(config, dict):
+            config = create_adapter_config(config)
+        elif isinstance(config, SamadhiConfig):
+            config = config.adapter  # Extract relevant config
+
         super().__init__(config)
-        self.linear = nn.Linear(config["input_dim"], config["dim"])
+        self.linear = nn.Linear(config.input_dim, config.dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.linear(x)
@@ -26,8 +39,13 @@ class MockAdapter(BaseAdapter):
 
 class MockDecoder(BaseDecoder):
     def __init__(self, config):
+        if isinstance(config, dict):
+            config = create_decoder_config(config)
+        elif isinstance(config, SamadhiConfig):
+            config = config.decoder
+
         super().__init__(config)
-        self.linear = nn.Linear(config["dim"], config["output_dim"])
+        self.linear = nn.Linear(config.dim, config.input_dim)  # output_dim is input_dim
 
     def forward(self, s: torch.Tensor) -> torch.Tensor:
         return self.linear(s)
@@ -36,8 +54,12 @@ class MockDecoder(BaseDecoder):
 # Define a simple MockRefiner for testing purposes
 class MockRefiner(BaseRefiner):
     def __init__(self, config):
+        if isinstance(config, SamadhiConfig):
+            # Refiners take BaseConfig or dict
+            config = config.vicara
+
         super().__init__(config)
-        self.linear = nn.Linear(config["dim"], config["dim"])
+        self.linear = nn.Linear(self.dim, self.dim)
 
     def forward(self, s: torch.Tensor) -> torch.Tensor:
         # Simple identity-like transformation for mock
@@ -46,24 +68,27 @@ class MockRefiner(BaseRefiner):
 
 @pytest.fixture
 def basic_config():
-    return {
+    config_dict = {
         "dim": 32,
         "input_dim": 100,
-        "output_dim": 10,
         "n_probes": 5,
         "gate_threshold": -1.0,
-        "refine_steps": 3,
-        "vicara_type": "standard",
+        "vicara": {
+            "refine_steps": 3,
+            "type": "standard",
+            "dim": 32,  # Explicitly set dim for component config creation if needed, though propagation should handle it
+        },
     }
+    return SamadhiConfig.from_dict(config_dict)
 
 
 @pytest.fixture
 def mock_components(basic_config):
     adapter = MockAdapter(basic_config)
-    vitakka = StandardVitakka(basic_config)  # No adapter argument needed
+    vitakka = StandardVitakka(basic_config.vitakka)  # No adapter argument needed
     # Use MockRefiner instead of MagicMock
     refiner = MockRefiner(basic_config)
-    vicara = StandardVicara(basic_config, refiner)
+    vicara = StandardVicara(basic_config.vicara, refiner)
     decoder = MockDecoder(basic_config)
     return adapter, vitakka, vicara, decoder
 
@@ -84,28 +109,31 @@ def test_samadhi_engine_forward_pass(basic_config, mock_components):
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
     batch_size = 2
-    input_tensor = torch.randn(batch_size, basic_config["input_dim"])
+    input_tensor = torch.randn(batch_size, basic_config.adapter.input_dim)
 
     output, s_final, meta = engine.forward(input_tensor)
 
-    assert output.shape == (batch_size, basic_config["output_dim"])
-    assert s_final.shape == (batch_size, basic_config["dim"])
+    assert output.shape == (batch_size, basic_config.decoder.input_dim)  # output_dim = input_dim for reconstruction
+    assert s_final.shape == (batch_size, basic_config.dim)
     assert "winner_id" in meta
     assert "gate_open" in meta
 
 
 def test_samadhi_engine_forward_step_open_gate(basic_config, mock_components):
     adapter, vitakka, vicara, decoder = mock_components
+
     # Ensure gate is always open for this test
-    basic_config["gate_threshold"] = -100.0  # Make sure gate is open
-    vitakka = StandardVitakka(basic_config)  # Re-init Vitakka with new gate_threshold (no adapter)
+    # We need to modify the config object directly since it's a dataclass
+    basic_config.vitakka.gate_threshold = -100.0
+
+    vitakka = StandardVitakka(basic_config.vitakka)  # Re-init Vitakka
 
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
-    input_tensor = torch.randn(1, basic_config["input_dim"])
+    input_tensor = torch.randn(1, basic_config.adapter.input_dim)
     s_final, full_log = engine.forward_step(input_tensor, 0)
 
-    assert s_final.shape == (1, basic_config["dim"])
+    assert s_final.shape == (1, basic_config.dim)
     assert full_log["step"] == 0
     assert full_log["probe_log"]["gate_open"] is True
     assert len(engine.history_log) == 1
@@ -113,13 +141,14 @@ def test_samadhi_engine_forward_step_open_gate(basic_config, mock_components):
 
 def test_samadhi_engine_forward_step_closed_gate(basic_config, mock_components):
     adapter, vitakka, vicara, decoder = mock_components
+
     # Ensure gate is always closed for this test
-    basic_config["gate_threshold"] = 100.0  # Make sure gate is closed
-    vitakka = StandardVitakka(basic_config)  # Re-init Vitakka with new gate_threshold (no adapter)
+    basic_config.vitakka.gate_threshold = 100.0
+    vitakka = StandardVitakka(basic_config.vitakka)
 
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
-    input_tensor = torch.randn(1, basic_config["input_dim"])
+    input_tensor = torch.randn(1, basic_config.adapter.input_dim)
     result = engine.forward_step(input_tensor, 0)
 
     assert result is None
@@ -150,14 +179,14 @@ def test_samadhi_engine_forward_skip_vitakka(basic_config, mock_components):
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
     batch_size = 2
-    input_tensor = torch.randn(batch_size, basic_config["input_dim"])
+    input_tensor = torch.randn(batch_size, basic_config.adapter.input_dim)
 
     # Skip Vitakka (run_vitakka=False)
     # Vicara runs on adapter output directly
     output, s_final, meta = engine.forward(input_tensor, run_vitakka=False, run_vicara=True)
 
-    assert output.shape == (batch_size, basic_config["output_dim"])
-    assert s_final.shape == (batch_size, basic_config["dim"])
+    assert output.shape == (batch_size, basic_config.decoder.input_dim)
+    assert s_final.shape == (batch_size, basic_config.dim)
     assert meta == {}  # Expect empty meta since Vitakka was skipped
 
 
@@ -166,16 +195,13 @@ def test_samadhi_engine_forward_skip_vicara(basic_config, mock_components):
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
     batch_size = 2
-    input_tensor = torch.randn(batch_size, basic_config["input_dim"])
+    input_tensor = torch.randn(batch_size, basic_config.adapter.input_dim)
 
     # Skip Vicara (run_vicara=False)
-    # s_final should be the same as s0 (Vitakka output)
-    # Since we can't easily capture intermediate s0 without mocking internal call,
-    # we verify output shape and meta existence.
     output, s_final, meta = engine.forward(input_tensor, run_vitakka=True, run_vicara=False)
 
-    assert output.shape == (batch_size, basic_config["output_dim"])
-    assert s_final.shape == (batch_size, basic_config["dim"])
+    assert output.shape == (batch_size, basic_config.decoder.input_dim)
+    assert s_final.shape == (batch_size, basic_config.dim)
     assert "winner_id" in meta
 
 
@@ -184,11 +210,11 @@ def test_samadhi_engine_forward_skip_both(basic_config, mock_components):
     engine = SamadhiEngine(adapter, vitakka, vicara, decoder, basic_config)
 
     batch_size = 2
-    input_tensor = torch.randn(batch_size, basic_config["input_dim"])
+    input_tensor = torch.randn(batch_size, basic_config.adapter.input_dim)
 
     # Skip Both (Autoencoder mode)
     output, s_final, meta = engine.forward(input_tensor, run_vitakka=False, run_vicara=False)
 
-    assert output.shape == (batch_size, basic_config["output_dim"])
-    assert s_final.shape == (batch_size, basic_config["dim"])
+    assert output.shape == (batch_size, basic_config.decoder.input_dim)
+    assert s_final.shape == (batch_size, basic_config.dim)
     assert meta == {}
