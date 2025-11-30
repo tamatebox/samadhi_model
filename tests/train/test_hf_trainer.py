@@ -77,9 +77,11 @@ def mock_config():
     # Use SamadhiConfig
     config_dict = {
         "dim": 10,
-        "stability_coeff": 0.1,
-        "entropy_coeff": 0.1,
-        "balance_coeff": 0.1,
+        "objective": {
+            "stability_coeff": 0.1,
+            "entropy_coeff": 0.1,
+            "balance_coeff": 0.1,
+        },
         "vitakka": {"n_probes": 5},
         "vicara": {"refine_steps": 2},
     }
