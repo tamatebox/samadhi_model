@@ -66,9 +66,17 @@ class SamadhiTrainer(Trainer):
 
         # Extract inputs
         if isinstance(inputs, dict):
-            # Try common keys
-            x = inputs.get("input_values") or inputs.get("pixel_values") or inputs.get("x")
-            y = inputs.get("labels") or inputs.get("y")
+            # Try common keys safely (avoiding boolean evaluation of tensors)
+            x = inputs.get("input_values")
+            if x is None:
+                x = inputs.get("pixel_values")
+            if x is None:
+                x = inputs.get("x")
+
+            y = inputs.get("labels")
+            if y is None:
+                y = inputs.get("y")
+
             logger.debug(
                 f"Extracted inputs from dict: x={x.shape if x is not None else None}, y={y.shape if y is not None else None}"
             )
