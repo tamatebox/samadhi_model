@@ -6,8 +6,8 @@ from src.train.objectives.base_objective import BaseObjective
 
 class AutoencoderObjective(BaseObjective):
     """
-    オートエンコーダの目的関数。再構成損失のみを計算します。
-    Vitakka と Vicara のプロセスはスキップされます。
+    Autoencoder objective function. Computes only reconstruction loss.
+    Vitakka and Vicara processes are skipped.
     """
 
     needs_vitakka: bool = False
@@ -21,14 +21,14 @@ class AutoencoderObjective(BaseObjective):
         self,
         x: torch.Tensor,
         y: Optional[torch.Tensor],
-        s0: torch.Tensor,  # Vitakkaをスキップする場合、これはAdapterの出力となる
-        s_final: torch.Tensor,  # Vicaraをスキップする場合、これはs0と同じ
+        s0: torch.Tensor,  # If Vitakka is skipped, this will be the Adapter output.
+        s_final: torch.Tensor,  # If Vicara is skipped, this will be the same as s0.
         decoded_s_final: torch.Tensor,
         metadata: Dict[str, Any],
         num_refine_steps: int,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        # オートエンコーダの場合、s_finalはAdapterの出力z（すなわちs0）であり、
-        # decoded_s_finalはそれをデコードした結果。ターゲットは元の入力x。
+        # In autoencoder mode, s_final is adapter output (i.e., s0),
+        # and decoded_s_final is the result of decoding it. The target is the original input x.
         recon_loss = self.recon_loss_fn(decoded_s_final, x)
 
         total_loss = recon_loss
@@ -36,9 +36,9 @@ class AutoencoderObjective(BaseObjective):
         loss_components = {
             "total_loss": total_loss.item(),
             "recon_loss": recon_loss.item(),
-            "stability_loss": 0.0,  # スキップされるため0
-            "entropy_loss": 0.0,  # スキップされるため0
-            "balance_loss": 0.0,  # スキップされるため0
+            "stability_loss": 0.0,  # Skipped, so 0
+            "entropy_loss": 0.0,  # Skipped, so 0
+            "balance_loss": 0.0,  # Skipped, so 0
         }
 
         return total_loss, loss_components

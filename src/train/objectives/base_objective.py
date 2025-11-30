@@ -6,12 +6,12 @@ import torch.nn as nn
 
 class BaseObjective(ABC):
     """
-    Samadhi トレーニング目的の抽象基底クラスです。
-    合計損失と個々の損失成分を計算するためのインターフェースを定義します。
+    Abstract base class for Samadhi training objectives.
+    Defines the interface for computing total loss and individual loss components.
 
-    プロパティ:
-        needs_vitakka (bool): Vitakka（探索プロセス）を必要とするかどうか。Falseの場合、Adapterの出力が直接潜在状態として扱われる。
-        needs_vicara (bool): Vicara（浄化プロセス）を必要とするかどうか。Falseの場合、Vicaraはスキップされる。
+    Properties:
+        needs_vitakka (bool): Whether Vitakka (Search process) is required. If False, Adapter output is used directly as the initial latent state.
+        needs_vicara (bool): Whether Vicara (Refinement process) is required. If False, Vicara is skipped.
     """
 
     needs_vitakka: bool = True
@@ -31,8 +31,8 @@ class BaseObjective(ABC):
 
     def _compute_entropy(self, probs: torch.Tensor) -> torch.Tensor:
         """
-        確率分布の正規化されたエントロピーを計算するためのヘルパー関数です。
-        [0, 1] の値を返します。
+        Helper function to compute the NORMALIZED entropy of a probability distribution.
+        Returns a value in [0, 1].
         """
         entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1).mean()
         n_probes = self.config["n_probes"]
@@ -44,9 +44,9 @@ class BaseObjective(ABC):
 
     def _compute_load_balance_loss(self, probs: torch.Tensor) -> torch.Tensor:
         """
-        プローブ崩壊を防ぐために正規化された負荷分散損失を計算します。
-        バッチ全体の平均プローブ使用量の分散にペナルティを与えます。
-        [0, 1] の値を返します。
+        Computes the NORMALIZED Load Balancing Loss to prevent Probe Collapse.
+        Penalizes the variance of the average probe usage across the batch.
+        Returns a value in [0, 1].
         """
         mean_usage = probs.mean(dim=0)
         balance_loss = mean_usage.var()
@@ -69,20 +69,20 @@ class BaseObjective(ABC):
         num_refine_steps: int,
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """
-        合計損失を計算し、個々の損失成分の辞書を返します。
+        Computes the total loss and returns a dictionary of individual loss components.
 
-        引数:
-            x (torch.Tensor): 元の入力データ。
-            y (Optional[torch.Tensor]): ターゲットデータ（教師あり学習用）。
-            s0 (torch.Tensor): Vitakka からの初期潜在状態。
-            s_final (torch.Tensor): Vicara からの最終的に浄化された潜在状態。
-            decoded_s_final (torch.Tensor): s_final にデコーダーを適用した出力。
-            metadata (Dict[str, Any]): Vitakka からのメタデータ（例: プローブ確率）。
-            num_refine_steps (int): Vicara 洗練ステップの数。
+        Args:
+            x (torch.Tensor): Original input data.
+            y (Optional[torch.Tensor]): Target data (for supervised learning).
+            s0 (torch.Tensor): Initial latent state from Vitakka.
+            s_final (torch.Tensor): Final purified latent state from Vicara.
+            decoded_s_final (torch.Tensor): Output from the decoder applied to s_final.
+            metadata (Dict[str, Any]): Metadata from Vitakka (e.g., probe probabilities).
+            num_refine_steps (int): Number of Vicara refinement steps.
 
-        戻り値:
+        Returns:
             Tuple[torch.Tensor, Dict[str, Any]]:
-                - total_loss (torch.Tensor): 結合された損失。
-                - loss_components (Dict[str, Any]): 個々の損失値の辞書。
+                - total_loss (torch.Tensor): The combined loss.
+                - loss_components (Dict[str, Any]): Dictionary of individual loss values.
         """
         pass
