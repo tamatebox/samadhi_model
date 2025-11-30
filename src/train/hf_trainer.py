@@ -1,0 +1,104 @@
+from typing import Dict, Any, Optional, Union, Tuple, List
+import torch
+from torch import nn
+from transformers import Trainer
+from transformers.trainer_utils import EvalPrediction
+from src.train.objectives.base_objective import BaseObjective
+
+
+class SamadhiTrainer(Trainer):
+    """
+    Hugging Face Trainer adapter for Samadhi Model.
+    Delegates loss calculation to a generic Objective component.
+    """
+
+    def __init__(
+        self,
+        model: nn.Module = None,
+        args: Any = None,
+        data_collator: Optional[Any] = None,
+        train_dataset: Optional[Any] = None,
+        eval_dataset: Optional[Any] = None,
+        tokenizer: Optional[Any] = None,
+        model_init: Optional[Any] = None,
+        compute_metrics: Optional[Any] = None,
+        callbacks: Optional[List[Any]] = None,
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        preprocess_logits_for_metrics: Optional[Any] = None,
+        objective: Optional[BaseObjective] = None,
+    ):
+        super().__init__(
+            model=model,
+            args=args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            model_init=model_init,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks,
+            optimizers=optimizers,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
+        if objective is None:
+            raise ValueError("An 'objective' instance must be provided to SamadhiTrainer.")
+        self.objective = objective
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        """
+        Overridden compute_loss to use Samadhi's Objective component.
+        Dynamically controls the forward pass based on objective's needs_vitakka and needs_vicara flags.
+        """
+        # HF Trainer passes inputs as a dictionary usually.
+        # Samadhi models expect tensor inputs.
+        # We assume the collator produces a dict with 'input_values' or similar,
+        # or we handle generic keys. For now, let's assume standard (x, y) or just (x) are needed.
+
+        # Extract inputs
+        if isinstance(inputs, dict):
+            # Try common keys
+            x = inputs.get("input_values") or inputs.get("pixel_values") or inputs.get("x")
+            y = inputs.get("labels") or inputs.get("y")
+        else:
+            # Fallback if inputs is tuple/list (less common in HF Trainer but possible with custom collator)
+            x = inputs[0]
+            y = inputs[1] if len(inputs) > 1 else None
+
+        if x is None:
+            # If we can't find 'x' by name, and inputs is a dict, maybe the first value is x?
+            # This is risky but a common fallback.
+            if isinstance(inputs, dict) and len(inputs) > 0:
+                x = list(inputs.values())[0]
+
+        # Ensure x is on device
+        x = x.to(self.args.device)
+        if y is not None:
+            y = y.to(self.args.device)
+
+        # --- Forward Pass (using SamadhiEngine's dynamic path selection) ---
+        # Assume 'model' passed here is the SamadhiEngine (or compatible) with dynamic forward.
+        output_from_decoder, s_final, metadata = model.forward(
+            x, run_vitakka=self.objective.needs_vitakka, run_vicara=self.objective.needs_vicara
+        )
+
+        # --- Loss Calculation ---
+        # num_refine_steps is only relevant if Vicara was run
+        num_refine_steps = model.config.get("refine_steps", 0) if self.objective.needs_vicara else 0
+
+        total_loss, loss_components = self.objective.compute_loss(
+            x=x,
+            y=y,
+            s0=metadata.get("s0", s_final),  # If Vitakka is skipped, s0 might not be in meta. Use s_final instead.
+            s_final=s_final,
+            decoded_s_final=output_from_decoder,
+            metadata=metadata,
+            num_refine_steps=num_refine_steps,
+        )
+
+        # Log custom metrics via self.log() if in the main process (for more detailed logging, requires custom callback)
+        # For now, just return loss.
+
+        if return_outputs:
+            return total_loss, output_from_decoder
+
+        return total_loss

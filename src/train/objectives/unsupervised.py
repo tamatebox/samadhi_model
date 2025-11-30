@@ -1,0 +1,66 @@
+from typing import Dict, Any, Tuple, Optional
+import torch
+import torch.nn as nn
+from src.train.objectives.base_objective import BaseObjective
+
+
+class UnsupervisedObjective(BaseObjective):
+    """
+    Unsupervised objective for Samadhi Model, typically using MSE for reconstruction
+    against the input itself. Incorporates reconstruction, stability, entropy, and
+    load balancing losses.
+    """
+
+    def __init__(self, config: Dict[str, Any], device: Optional[str] = None):
+        super().__init__(config, device)
+        self.recon_loss_fn = nn.MSELoss()
+
+    def compute_loss(
+        self,
+        x: torch.Tensor,
+        y: Optional[torch.Tensor],  # y is ignored in unsupervised learning
+        s0: torch.Tensor,
+        s_final: torch.Tensor,
+        decoded_s_final: torch.Tensor,
+        metadata: Dict[str, Any],
+        num_refine_steps: int,
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        # 1. Reconstruction Loss (x is the target)
+        recon_loss = self.recon_loss_fn(decoded_s_final, x)
+
+        # 2. Stability Loss
+        batch_stability_loss = torch.tensor(0.0, device=self.device)
+        if num_refine_steps > 0 and "s_history" in metadata:
+            s_history = metadata["s_history"]
+            for i in range(1, len(s_history)):
+                batch_stability_loss += torch.norm(s_history[i] - s_history[i - 1], p=2, dim=1).sum()
+            batch_stability_loss = batch_stability_loss / (len(x) * num_refine_steps)
+
+        # 3. Entropy Loss
+        probs = metadata["probs"]
+        entropy_loss = self._compute_entropy(probs)
+
+        # 4. Load Balancing Loss
+        balance_loss = self._compute_load_balance_loss(probs)
+
+        # Get coefficients from Config
+        stability_coeff = self.config.get("stability_coeff", 0.01)
+        entropy_coeff = self.config.get("entropy_coeff", 0.1)
+        balance_coeff = self.config.get("balance_coeff", 0.001)
+
+        total_loss = (
+            recon_loss
+            + (stability_coeff * batch_stability_loss)
+            + (entropy_coeff * entropy_loss)
+            + (balance_coeff * balance_loss)
+        )
+
+        loss_components = {
+            "total_loss": total_loss.item(),
+            "recon_loss": recon_loss.item(),
+            "stability_loss": batch_stability_loss.item(),
+            "entropy_loss": entropy_loss.item(),
+            "balance_loss": balance_loss.item(),
+        }
+
+        return total_loss, loss_components
