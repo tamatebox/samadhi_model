@@ -105,6 +105,31 @@ $$
 
 This process mathematically corresponds to **Banach’s Fixed Point Theorem**.
 
+### 2.2.1 Convergence: Theory vs. Practice
+
+**Theoretical Foundation: The Ideal Contraction Mapping**
+Mathematically, if the mapping $F_\theta$ in Vicāra is Lipschitz continuous with a Lipschitz constant $c$ such that $0 < c < 1$ (i.e., it is a contraction mapping), Banach's Fixed Point Theorem guarantees absolute convergence from any initial state $s_0$ to a unique fixed point $s^*$.
+
+**Practical Challenge: Expressivity vs. Stability**
+However, enforcing a strict hard constraint (like spectral normalization) to ensure $c < 1$ across the entire parameter space of high-capacity neural networks (like MLPs or Attention mechanisms) can severely limit their expressivity. Furthermore, this condition may be temporarily violated during initialization or transient phases of training.
+
+**Samadhi's Solution: Dynamics Learning & Inertia**
+Instead of rigid constraints, Samadhi ensures effective convergence through a combination of two soft approaches:
+
+1.  **Dynamics Learning (Stability Loss):**
+    We incorporate a **Stability Loss** into the training objective:
+    $$
+    \mathcal{L}_{stability} = \| S_{t} - S_{t-1} \|^2
+    $$
+    This penalizes divergent behavior, effectively guiding the network to "learn to converge." The model naturally acquires contractive dynamics through optimization rather than through enforced mathematical restrictions.
+
+2.  **Inertial Update (Damping):**
+    We introduce an inertia parameter $\beta$ into the state update rule:
+    $$
+    S_{t+1} = (1 - \beta) S_t + \beta \Phi(S_t)
+    $$
+    By dampening rapid state transitions, this mechanism lowers the effective Lipschitz constant of the system, preventing oscillations and ensuring a "soft landing" into the attractor, even if the internal map $\Phi$ is locally expansive.
+
 ---
 
 ## 2.3 Sati: Stopping Gate
