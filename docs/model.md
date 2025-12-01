@@ -7,7 +7,7 @@
 
 ## 1. 概念定義 (Concept Definition)
 
-**Samadhi Framework**は、従来の「系列予測（Next Token Prediction）」を行う生成モデルに対し、対象の「本質的構造の抽出（State Refinement）」と「内部状態の不動化（Convergence）」を目的とした、**再帰型アテンション・アーキテクチャ**である。
+**Samadhi Framework**は、カオス的な情報ストリームから対象の『本質的構造の抽出（State Refinement）』と『内部状態の不動化（Convergence）』を目的とした、**再帰型アテンション・アーキテクチャ**である。これは、情報が発散的に拡散するのではなく、収束的に秩序を形成するアプローチを採る。
 
   * **Core Philosophy:** 情報の水平的な拡張（Divergence/Generation）ではなく、垂直的な深化（Convergence/Insight）を行う。
   * **Output:** エントロピーが極小化された単一の不変状態ベクトル（Latent Point Attractor）。
@@ -224,16 +224,18 @@ $\mathcal{L} = \underbrace{|| S_{T} - S_{T-1} ||^2}_{Stability} + \lambda_1 \und
 
 -----
 
-## 7. 既存モデルとの比較 (Comparison)
+## 7. 基本動作の対比 (Core Dynamics: Divergence vs. Convergence)
 
-| 特徴 | Transformer (GPT) | **Samadhi Framework** |
+Samadhi Frameworkの基本動作は、従来の生成モデルがとる発散的なアプローチとは対照的に、収束を基盤としています。
+
+| 特徴 | 発散モデル (Divergent Models) | **収束モデル (Convergent Models)** |
 | :--- | :--- | :--- |
-| **基本動作** | 次トークンの予測 (発散) | 状態の純化・不動化 (収束) |
-| **時間依存性** | 履歴(Context Window)に依存 | 現在の状態(State)のみに依存 (Markov) |
-| **アテンション** | Self-Attention (Token間) | Recursive Attention (State-Probe間) |
-| **推論コスト** | $O(N^2)$ (文脈長で増大) | $O(1)$ (定数・収束ステップ数のみ) |
-| **説明可能性** | 低い (Attention Mapのみ) | **極めて高い (Probe/Cetanā Log)** |
-| **哲学的基盤** | 連想・生成 | **禅定・洞察** |
+| **基本動作** | 系列予測、生成、発散 | 状態の純化、不動化、収束 |
+| **時間依存性** | 文脈履歴に依存 | 現在の状態のみに依存 (マルコフ性) |
+| **アテンション** | Self-Attention (要素間) | Recursive Attention (状態-プローブ間) |
+| **推論の性質** | **開放的・無限 (Open/Infinite)**<br>どこまでも続きうる | **閉鎖的・有限 (Closed/Finite)**<br>一点に定まる |
+| **説明可能性** | 限定的 (Attention Mapなど) | **極めて高い (プローブ/セタナログ)** |
+| **哲学的基盤** | 連想、生成、拡大 | **禅定、洞察、本質抽出** |
 
 -----
 

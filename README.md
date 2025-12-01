@@ -1,14 +1,14 @@
 # Samadhi Framework (Deep Convergence Architecture)
 
-> **"From Generation to Convergence."**
+> **"From Chaos to Essence."**
 
 ![Status](https://img.shields.io/badge/Status-Experimental-orange)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-**Samadhi Framework** is a modular **recursive attention architecture** designed not for traditional "sequence prediction (Next Token Prediction)" seen in generative AI, but for "extracting the essential structure" and "stabilizing the internal state" of the subject.
+**Samadhi Framework** is a modular **recursive attention architecture** designed for **extracting the essential structure** and **stabilizing the internal state** from complex, noisy data.
 
-It engineeringly implements a vertical deepening of information (quiet insight) rather than horizontal expansion (talkative generation).
+Instead of expanding information horizontally (generation), it implements a vertical deepening (insight) that reduces information entropy to reach a stable, meaningful state (Attractor).
 
 Now evolved into a **Meta-Framework**, it allows you to compose **Adapters** (Input), **Vitakka** (Search), **Vicāra** (Refinement), and **Decoders** (Output) to apply this convergence philosophy to any domain—Tabular, Vision, Time Series, and NLP.
 
@@ -16,7 +16,7 @@ Now evolved into a **Meta-Framework**, it allows you to compose **Adapters** (In
 
 ## 🧘 Concept & Philosophy
 
-Modern LLMs (Transformers) have a "divergent" nature, generating tokens one after another by riding the waves of probability distributions. In contrast, **Samadhi** is a "convergent" engine that transitions its state towards a dynamical system's attractor (fixed point).
+**Samadhi** is a "convergent" engine that transitions its state towards a dynamical system's attractor (fixed point).
 
 It implements the process of meditative concentration (Samadhi) in Buddhist psychology as the following engineering modules:
 
@@ -27,7 +27,8 @@ It implements the process of meditative concentration (Samadhi) in Buddhist psyc
 | **Vicāra** | 伺 (Sustained Application) | **Recurrent Refinement** | Blocks external input and minimizes state energy (purifies) through a recursive loop. |
 | **Santāna** | 相続 (Continuity) | **State Dynamics Log** | Tracks the temporal transitions of intentions (concentration, shift, dispersion). |
 
-> 📖 For detailed architecture specifications, see [docs/model.md](docs/model.md).
+> 📖 For detailed architecture specifications, see [Japanese](docs/model.md) / [English](docs/model_en.md).
+> 📜 For theoretical foundations, see [Japanese Theory](docs/theory/jp.md) / [English Theory](docs/theory/en.md).
 
 ---
 
@@ -149,7 +150,7 @@ from src.configs.objectives import ObjectiveConfig
 
 # Load config
 config_data = {
-    "dim": 32, 
+    "dim": 32,
     "adapter": {"type": AdapterType.CNN.value, "channels": 3, "img_size": 32},
     "decoder": {"type": DecoderType.CNN.value, "channels": 3, "img_size": 32, "input_dim": 32*32*3}, # input_dim needed for linear layer before deconv
     "vitakka": {"n_probes": 5},
@@ -191,19 +192,7 @@ trainer = SamadhiTrainer(
 trainer.train()
 ```
 
------
 
-## 📊 Architecture Comparison
-
-| Feature | Transformer (GPT) | Samadhi Framework (Ours) |
-| :--- | :--- | :--- |
-| **Vector Flow** | Divergence | Convergence |
-| **Time Complexity** | $O(N^2)$ (Quadratic) | $O(1)$ (Constant/Iterative) |
-| **Dependency** | Context History | Current State Only (Markov) |
-| **Objective** | Likelihood Maximization | Stability Energy Minimization |
-| **Output** | Probability Distribution | Fixed Point Attractor |
-
------
 
 ## 🛠 Roadmap
 

@@ -84,11 +84,34 @@ class MyDataset(Dataset):
 
 ### Step 4: Model Instantiation
 
-Use a preset factory from `src/presets/` if possible. This handles connecting the Adapter, Vitakka, Vicara, and Decoder.
+You can instantiate the model using either a **Preset Factory** (simple, standard) or the **SamadhiBuilder** (flexible, custom).
+
+**Option A: Using Preset Factories (Recommended for Beginners)**
+Handles connecting standard components (Adapter, Vitakka, Vicara, Decoder).
 
 ```python
 from src.presets.sequence import create_lstm_samadhi
 model = create_lstm_samadhi(config)
+```
+
+**Option B: Using SamadhiBuilder (Advanced)**
+Allows detailed customization and component-by-component construction.
+
+```python
+from src.core.builder import SamadhiBuilder
+
+# 1. Initialize Builder
+builder = SamadhiBuilder(config)
+
+# 2. Set Components (Chainable)
+# If arguments are omitted, types are inferred from the config object.
+builder.set_adapter() \
+       .set_vitakka() \
+       .set_vicara() \
+       .set_decoder()
+
+# 3. Build Final Model
+model = builder.build()
 ```
 
 ### Step 5: Phase 1 - Pre-training (Dynamics Learning)
