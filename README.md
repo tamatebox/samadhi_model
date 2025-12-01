@@ -28,6 +28,7 @@ It implements the process of meditative concentration (Samadhi) in Buddhist psyc
 | **Santāna** | 相続 (Continuity) | **State Dynamics Log** | Tracks the temporal transitions of intentions (concentration, shift, dispersion). |
 
 > 📖 For detailed architecture specifications, see [Japanese](docs/model.md) / [English](docs/model_en.md).
+
 > 📜 For theoretical foundations, see [Japanese Theory](docs/theory/jp.md) / [English Theory](docs/theory/en.md).
 
 ---
@@ -192,7 +193,33 @@ trainer = SamadhiTrainer(
 trainer.train()
 ```
 
+---
 
+## 📚 Notebook Demos
+
+The `notebooks/` directory contains various Jupyter Notebooks that demonstrate the Samadhi Framework's capabilities across different domains. These notebooks provide hands-on examples for understanding model behavior, exploring applications, and experimenting with various configurations.
+
+To run these demos, ensure you have `jupyter lab` installed (`uv pip install "jupyterlab>=3"` if not already installed) and then navigate to the `notebooks/` directory.
+
+### Available Demos:
+
+*   **MNIST Demo (`mnist_demo.ipynb`):** Visualizes the "purification" process of noisy MNIST digits, showcasing the convergence property.
+*   **Fraud Detection Demo (`fraud_unsupervised_detection_explained.ipynb`):** An example of applying the Samadhi Model for fraud detection using unsupervised learning.
+*   **Time Series Anomaly Detection Demo (`time_series_anomaly_detection.ipynb`):** Demonstrates anomaly detection on time series data.
+
+### How to Run:
+
+1.  **Install Jupyter Lab (if not already installed):**
+    ```bash
+    uv pip install "jupyterlab>=3"
+    ```
+2.  **Start Jupyter Lab from the project root:**
+    ```bash
+    jupyter lab
+    ```
+3.  **Navigate to the `notebooks/` directory and open any of the `.ipynb` files.**
+
+---
 
 ## 🛠 Roadmap
 
