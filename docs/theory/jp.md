@@ -68,13 +68,13 @@ Sati（停止ゲート + 出力）
 
 入力埋め込み `X` と、プロトタイプベクトル `{P_k}` から初期状態を生成する。
 
-$begin:math:display$
-\\alpha\_k \= \\text\{softmax\}\\left\( \\frac\{\\langle X\, P\_k \\rangle\}\{\\tau\} \\right\)
-$end:math:display$
+$$
+\alpha_k = \mathrm{softmax}\!\left( \frac{\langle X, P_k \rangle}{\tau} \right)
+$$
 
-$begin:math:display$
-s\_0 \= \\sum\_k \\alpha\_k\\\, P\_k
-$end:math:display$
+$$
+s_0 = \sum_k \alpha_k\, P_k
+$$
 
 - **学習時:** Soft Attention（τ 大）
 - **推論時:** Hard Attention（τ → 0）
@@ -87,22 +87,22 @@ Transformer と異なり、**意味的に整合した初期状態から思考が
 
 Vicāra は縮小写像の形をとる：
 
-$begin:math:display$
-s\_\{t\+1\} \= F\_\\theta\(s\_t\, X\)
-$end:math:display$
+$$
+s_{t+1} = F_\theta(s_t\, X)
+$$
 
 縮小条件：
 
-$begin:math:display$
-\\\|F\_\\theta\(s\_a\) \- F\_\\theta\(s\_b\)\\\| \\leq c\\\, \\\|s\_a \- s\_b\\\|
-\\quad \(0 \< c \< 1\)
-$end:math:display$
+$$
+\|F_\theta(s_a) - F_\theta(s_b)\| \le c\, \|s_a - s_b\|
+\quad (0 < c < 1)
+$$
 
 これにより、バナッハの不動点定理に基づき、
 
-$begin:math:display$
-s\^\\\* \= F\_\\theta\(s\^\\\*\)
-$end:math:display$
+$$
+s^{*} = F_\theta(s^{*})
+$$
 
 が一意に存在し、反復更新によって必ず収束する。
 
@@ -112,13 +112,13 @@ $end:math:display$
 
 収束判定：
 
-$begin:math:display$
-\\Delta\_t \= \\\| s\_t \- s\_\{t\-1\} \\\|
-$end:math:display$
+$$
+\Delta_t = \| s_t - s_{t-1} \|
+$$
 
-$begin:math:display$
-\\Delta\_t \< \\epsilon \\quad \\Rightarrow \\quad 停止
-$end:math:display$
+$$
+\Delta_t < \epsilon \quad \Rightarrow \quad \text{停止}
+$$
 
 Transformer のように「確率的にトークンを生成し続ける」構造ではなく、
 Samadhi は **収束＝停止** する。
@@ -129,15 +129,15 @@ Samadhi は **収束＝停止** する。
 
 ## 3.1 リアプノフエネルギーの定義
 
-$begin:math:display$
-E\(s\) \= \\\| s \- F\_\\theta\(s\) \\\|\^2
-$end:math:display$
+$$
+E(s) = \| s - F_\theta(s) \|^2
+$$
 
 Vicāra の反復は事実上、
 
-$begin:math:display$
-s\_t \\approx \\arg\\min\_s E\(s\)
-$end:math:display$
+$$
+s_t \approx \arg\min_s E(s)
+$$
 
 というエネルギー最小化に相当する。
 
@@ -193,9 +193,9 @@ Samadhi は**DEQ の一般性**と **Hopfield 的安定性**を統合した位�
 Samadhi は推論過程そのものを記録し、
 **「迷い → 精製 → 確信」** のダイナミクスを可視化する。
 
-$begin:math:display$
-\\mathcal\{S\} \= \\\{s\_0\, s\_1\, \\dots\, s\^\\\*\\\}
-$end:math:display$
+$$
+\mathcal{S} = \{ s_0, s_1, \dots, s^{*} \}
+$$
 
 Santāna Log により：
 
@@ -274,11 +274,3 @@ def samadhi_forward(X, prototypes, T=6):
 ```
 
 ---
-
-# 付録B. 計算量
-
-$begin:math:display$
-\\text\{総推論コスト\} \= O\(N\) \+ O\(1\) \= O\(N\)
-$end:math:display$
-
-*思考コスト*は入力長に依存しない（定数）。

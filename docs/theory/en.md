@@ -65,11 +65,13 @@ Sati (Stopping Gate + Output)
 
 Given an input embedding `X` and a set of prototype vectors `{P_k}`, Vitakka produces an initial state:
 
-$begin:math:display$
-\\alpha\_k \= \\text\{softmax\}\\left\( \\frac\{\\langle X\, P\_k \\rangle\}\{\\tau\} \\right\)\,
-\\quad
-s\_0 \= \\sum\_k \\alpha\_k\\\, P\_k
-$end:math:display$
+$$
+\alpha_k = \mathrm{softmax}\!\left( \frac{\langle X, P_k \rangle}{\tau} \right)
+$$
+
+$$
+s_0 = \sum_k \alpha_k\, P_k
+$$
 
 - **Low τ → Hard Attention (inference)**
 - **High τ → Soft Attention (training)**
@@ -82,22 +84,24 @@ This gives **meaningful initial conditions**, unlike DEQ’s random/zero initial
 
 Vicāra applies a contractive transformation:
 
-$begin:math:display$
-s\_\{t\+1\} \= F\_\\theta\(s\_t\, X\)
-$end:math:display$
+$$
+s_{t+1} = F_\theta(s_t\, X)
+$$
+
 
 with the condition:
 
-$begin:math:display$
-\\\|F\_\\theta\(s\_a\) \- F\_\\theta\(s\_b\)\\\| \\leq c\\\, \\\|s\_a \- s\_b\\\|
-\\quad \(0 \< c \< 1\)
-$end:math:display$
+$$
+\|F_\theta(s_a) - F_\theta(s_b)\| \le c\, \|s_a - s_b\|
+\quad (0 < c < 1)
+$$
+
 
 This guarantees convergence to a unique fixed point:
 
-$begin:math:display$
-s\^\\\* \= F\_\\theta\(s\^\\\*\)
-$end:math:display$
+$$
+s^{*} = F_\theta(s^{*})
+$$
 
 This process mathematically corresponds to **Banach’s Fixed Point Theorem**.
 
@@ -107,13 +111,13 @@ This process mathematically corresponds to **Banach’s Fixed Point Theorem**.
 
 Convergence is detected through:
 
-$begin:math:display$
-\\Delta\_t \= \\\| s\_t \- s\_\{t\-1\} \\\|
-$end:math:display$
+$$
+\Delta_t = \| s_t - s_{t-1} \|
+$$
 
-$begin:math:display$
-\\text\{stop if \} \\Delta\_t \< \\epsilon
-$end:math:display$
+$$
+\Delta_t < \epsilon \quad \Rightarrow \quad \text{停止}
+$$
 
 Thus, unlike autoregressive Transformers, **Samadhi can “stop thinking”.**
 
@@ -124,15 +128,15 @@ Thus, unlike autoregressive Transformers, **Samadhi can “stop thinking”.**
 ## 3.1 Lyapunov Energy
 We define an energy function:
 
-$begin:math:display$
-E\(s\) \= \\\| s \- F\_\\theta\(s\) \\\|\^2
-$end:math:display$
+$$
+E(s) = \| s - F_\theta(s) \|^2
+$$
 
 Vicāra minimizes this energy implicitly:
 
-$begin:math:display$
-s\_t \= \\arg\\min\_s E\(s\)
-$end:math:display$
+$$
+s_t \approx \arg\min_s E(s)
+$$
 
 Thus Samadhi is both:
 - an **implicit-function model**
@@ -151,9 +155,9 @@ Samadhi:
 
 Therefore:
 
-$begin:math:display$
-\\text\{Inference Cost\} \= O\(N\) \+ O\(T\) \= O\(N\)
-$end:math:display$
+$$
+\text{Inference Cost} = O(N) + O(T) = O(N)
+$$
 
 The *thinking cost* is **O(1)**.
 
@@ -198,13 +202,13 @@ Samadhi sits between DEQ (implicit) and Hopfield (associative memory).
 
 ---
 
-# 5. Explainability: Santāna Log (New)
+# 5. Explainability: Santāna Log
 
 Samadhi records *the evolution of thought*:
 
-$begin:math:display$
-\\mathcal\{S\} \= \\\{s\_0\, s\_1\, \\dots\, s\^\\\*\\\}
-$end:math:display$
+$$
+\mathcal{S} = \{ s_0, s_1, \dots, s^{*} \}
+$$
 
 This enables:
 
@@ -282,9 +286,3 @@ def samadhi_forward(X, prototypes, T=6):
 ```
 
 ---
-
-# Appendix B. Complexity
-
-$begin:math:display$
-\\text\{Total Inference\} \= O\(N\) \+ O\(1\) \= O\(N\)
-$end:math:display$
