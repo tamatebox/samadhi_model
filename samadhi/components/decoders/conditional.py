@@ -44,6 +44,7 @@ class ConditionalDecoder(BaseDecoder):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, self.output_dim),
+            nn.Tanh(),  # Bound output to [-1, 1] for normalized data
         )
 
     def forward(self, s_and_ctx: torch.Tensor) -> torch.Tensor:
