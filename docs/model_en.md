@@ -1,289 +1,416 @@
-# Samadhi Framework (Deep Convergence Architecture) Specification
+# Satipatthana Framework (Introspective Deep Convergence Architecture) Specification
 
-**Version:** 3.0 (Framework Modularization)
+**Version:** 4.0 (The Three Engines & Guided Convergence)
 **Status:** Active Specification
 
 -----
 
 ## 1. Concept Definition
 
-The **Samadhi Framework** is a **recursive attention architecture** designed to **extract essential structures (State Refinement)** and **stabilize internal states (Convergence)** from chaotic information streams. It adopts an approach of convergent order formation rather than divergent information expansion.
+The **Satipatthana Framework** is an **introspective recursive attention architecture** designed to **converge towards essential structures (Samatha)** from chaotic information streams and **introspect (Vipassana)** that process to explain its own confidence.
 
-  * **Core Philosophy:** Focuses on vertical deepening (Convergence/Insight) rather than horizontal expansion (Divergence/Generation).
-  * **Output:** A single invariant state vector with minimized entropy (Latent Point Attractor).
-  * **Operational Mode:** Dynamic transition from an Open System to a Closed System.
+The name "Satipatthana" (念処) means "establishment of mindfulness", symbolizing the architecture's essence of discerning truth through self-observation and introspection.
+
+* **Core Philosophy:** In contrast to traditional "divergence/generation" models, adopts a three-phase approach of "convergence/introspection/expression".
+* **Operational Mode:** Progressive knowledge acquisition through a 4-stage curriculum (Adapter → Samatha → Vipassana → Decoder).
 
 -----
 
 ## 2. System Architecture
 
-This framework is built by composing modular components: Adapter, Vitakka, Vicara, and Decoder.
+This framework consists of three main engines (Samatha, Vipassana, Decoder) and modular components that compose them.
 
-### Adapter (Manasikāra - Input Adaptation)
+### 2.1. Data Flow Overview
 
-**Function:** Projects and normalizes raw external inputs $X_{raw}$ from various modalities (image, time series, text, etc.) into the model-specific latent space (Samadhi Space).
-
-*   **Role:** Transforms external signals into a "semantic format" that the model can process (Attention/Manasikāra).
-*   **Interface:** `BaseAdapter` (`samadhi/components/adapters/base.py`)
-*   **Implementations:**
-    *   *MlpAdapter:* For tabular data or flat vectors.
-    *   *CnnAdapter:* For image data (Conv2d).
-    *   *LstmAdapter:* For time series data (LSTM).
-    *   *TransformerAdapter:* For sequence data (Transformer Encoder).
-*   **Output:** Latent vector $X_{adapted} \in \mathbb{R}^d$.
-
-### Vitakka (Search & Orientation)
-
-**Function:** Discovers and orients towards an initial attractor (seed) worth converging to from the chaotic input stream ($X_{adapted}$).
-
-*   **Interface:** `BaseVitakka` (`samadhi/components/vitakka/base.py`)
-1.  **Concept Probes ($\mathbf{P}$):**
-      * The system holds $K$ "Concept Probes (Basis Vectors)".
-2.  **Active Resonance:**
-      * Calculates resonance (dot product) between input $X$ and probes $\mathbf{P}$.
-      * **Lateral Inhibition:** Sets Softmax temperature $\tau$ low to highlight the strongest probe (Winner).
-3.  **Confidence Gating (Anti-Hallucination):**
-      * If maximum resonance is below threshold $\theta_{gate}$, input is considered "noise (distraction)" and processing is blocked (Gate Closed).
-4.  **$S_0$ Slice Generation:**
-      * Uses the winner probe $p_{win}$ as a Query to slice the input $X$ via Attention, generating initial state $S_0$.
-
-### Vicāra (Recurrent Refinement)
-
-**Function:** Blocks external input and recursively purifies the internal state.
-
-*   **Interface:** `BaseVicara` (`samadhi/components/vicara/base.py`)
-*   **Implementations:**
-    *   *StandardVicara:* Shares a single general Refiner ($\Phi$).
-    *   *WeightedVicara:* Uses a weighted sum of multiple Refiners.
-    *   *ProbeSpecificVicara:* Has a dedicated Refiner ($\Phi_k$) for each concept probe $p_k$.
-
-1.  **Isolation:** At $t > 0$, the gate to external input $X$ is closed, allowing only self-loops.
-2.  **Refinement Loop:**
-      * **Hard Attention Mode (Inference):** Applies only the Refiner $\Phi_{win}$ corresponding to the winner probe.
-          * $S_{t+1} = \Phi_{win}(S_t)$
-      * **Soft Attention Mode (Training):** Updates using a weighted sum based on probability distribution of all probes (for gradient propagation).
-          * $S_{t+1} = \sum_k w_k \Phi_k(S_t)$
-3.  **Convergence Check:**
-      * When state change $||S_{t+1} - S_t||$ falls below $\epsilon$, it is considered "Appanā (Absorption)" and inference ends.
-
-### Refiner (Internal Dynamics)
-
-**Function:** An execution unit inside Vicāra that defines state transitions (dynamics) in the latent space.
-
-*   **Interface:** `BaseRefiner` (`samadhi/components/refiners/base.py`)
-*   **Implementations:**
-    *   *MlpRefiner:* Simple state update using Fully Connected layers and activation functions.
-    *   *GruRefiner:* (Future) State update with memory using GRU cells.
-    *   *AttentionRefiner:* (Future) Organizing relationships between states using Self-Attention.
-
-### Sati-Sampajañña (Meta-Cognition & Logging)
-
-**Function:** Records system behavior as a "causal narrative" to ensure Explainability (XAI).
-
-1.  **Probe Log (Momentary Awareness):** What was selected in that step.
-2.  **Cetanā Dynamics (Flow of Time):** Tracking transition of intent (Sustain, Shift, Scatter) by comparing with the previous step.
-
-### Decoder (Expression - Output Reconstruction)
-
-**Function:** Restores or converts the converged and purified latent state $S_{final}$ back to the original input format or target format.
-
-*   **Role:** Returning internal insight to external expression.
-*   **Interface:** `BaseDecoder` (`samadhi/components/decoders/base.py`)
-*   **Implementations:**
-    *   *ReconstructionDecoder:* Returns $S_{final}$ to original input dimensions (for Autoencoder).
-    *   *CnnDecoder:* For image reconstruction.
-    *   *LstmDecoder / SimpleSequenceDecoder:* For sequence reconstruction.
-*   **Output:** Reconstructed data $\hat{X}$ or predicted value $Y$.
-
------
-
-## 3. Mathematical Formulation
-
-### 3.1. Vitakka Phase (Resonance)
-
-Resonance score $R_k$ of probe $p_k$ for input $X \in \mathbb{R}^{L \times d}$:
-
-$Score_k = || \frac{1}{\sqrt{d}} \sum_{i=1}^{L} \text{Softmax}(p_k^T x_i) \cdot x_i ||$
-
-Winner determination and probability distribution (with lateral inhibition):
-$\hat{w} = \text{Softmax}\left( \frac{[Score_1, \dots, Score_K]}{\tau} \right)$
-
-### 3.2. Initialization ($S_0$)
-
-Initial state determination by gate $G \in \{0, 1\ gimana
-$S_0 = G \cdot \text{Attention}(Q=p_{win}, K=X, V=X)$
-Where $G = 1 \text{ if } \max(Score) > \theta_{gate} \text{ else } 0$.
-
-### 3.3. Vicāra Phase (State Transition)
-
-Update rule as a first-order Markov process:
-$S_{t+1} = (1 - \beta) S_t + \beta \Phi_k(S_t)$
-
-  * $\beta$: Update rate (inertia term). Prevents sudden changes and ensures stable trajectory.
-  * $\Phi_k$: Mapping function specific to selected concept $k$ (in Probe-Specific case).
-  * $\lim_{t \to \infty} || S_{t+1} - S_t || = 0$ (Convergence to fixed point)
-
-### 3.4. Loss Function (Stability Loss)
-
-The objective function during training depends on the selected `Objective`. The basic form is:
-$\mathcal{L} = \underbrace{|| S_{T} - S_{T-1} ||^2}_{Stability} + \lambda_1 \underbrace{\sum |S_T|}_{Sparsity} - \lambda_2 \underbrace{I(S_T; S_0)}_{Info Retention}$
-
------
-
-## 4. Data Structures
-
-### 4.1. Probe Log (Snapshot)
-
-Metadata for each inference step.
-
-```json
-{
-  "timestamp": 12345678,
-  "intention": {
-    "winner_id": 3,
-    "winner_label": "Logical_Causality",
-    "confidence": 0.94,
-    "gate_status": "OPEN",
-    "entropy": 0.05
-  },
-  "raw_scores": [0.01, 0.02, 0.01, 0.94, 0.02]
-}
+```txt
+Raw Input (X)
+    ↓
+[SamathaEngine]
+    Augmenter → Adapter → Vitakka → Vicara loop (w/ Sati) → S*, SantanaLog
+    ↓
+[VipassanaEngine]
+    S* + SantanaLog → V_ctx, α (trust_score)
+    ↓
+[ConditionalDecoder]
+    S* + V_ctx → Output (Y)
 ```
 
-### 4.2. Cetanā Dynamics Log (Transition)
+### 2.2. Engine 1: SamathaEngine (The Meditator)
 
-Log describing the temporal flow of intention.
+**Role:** World model. Converges any input to a "meaningful point".
 
-```json
-{
-  "step": 5,
-  "transition": {
-    "from": "Breath_Rhythm",
-    "to": "Body_Sensation",
-    "type": "Shift",
-    // Types: "Sustain", "Shift", "Distracted", "Deepening"
-    "attention_shift_magnitude": 0.45,
-    "smoothness": 0.8
-  }
-}
+**Input:** Raw Data `X` (Batch, *)
+**Output:**
+
+* `S*` (Batch, Dim): Converged latent state
+* `SantanaLog`: Object recording the thinking trajectory
+* `severity` (Batch,): Noise intensity (for Vipassana target)
+
+**Component Structure:**
+
+| Component | Role |
+|:---|:---|
+| **Adapter** | Projects and normalizes raw input to latent space |
+| **Augmenter** | Applies noise/perturbation to input (during training) |
+| **Vitakka** | Probe-based initial state $S_0$ generation |
+| **Vicara** | Single-step state update ($S_t \rightarrow S_{t+1}$) |
+| **Sati** | Convergence check and stopping control |
+
+**Features:** Independent of tasks or labels, performs only "structure extraction". Internal perturbation control is possible via `drunk_mode` flag.
+
+### 2.3. Engine 2: VipassanaEngine (The Observer)
+
+**Role:** Meta-cognition. Monitors whether Samatha's thinking process (log) was sound.
+
+**Input:** `S*` (Batch, Dim) + `SantanaLog`
+**Output:**
+
+* `V_ctx` (Batch, context_dim): Hint information for decoder (embedding of "doubt")
+* `α` (Batch, 1): Trust score (0.0–1.0)
+
+**Structure:** `StandardVipassana` (LogEncoder + ConfidenceMonitor)
+
+### 2.4. Engine 3: ConditionalDecoder (The Speaker)
+
+**Role:** Expression. Integrates state and context into human-understandable form.
+
+**Input:** `S*` (Batch, Dim) + `V_ctx` (Batch, context_dim) → Concatenate → (Batch, Dim + context_dim)
+**Output:** `Y` (Batch, output_dim)
+
+**Features:** Enables "humble expression"—when uncertain, output reflects that uncertainty (e.g., wider variance). **The only Decoder used during inference.**
+
+### 2.5. Reconstruction Heads & AuxHead (Training Auxiliary)
+
+Auxiliary modules for training stabilization. **Not used during inference.**
+
+* **`adapter_recon_head`** (Stage 0): Reconstructs original input from Adapter output `z`
+* **`samatha_recon_head`** (Stage 1): Reconstructs original input from converged point `S*`
+* **`AuxHead`** (Stage 1): Auxiliary head for task prediction from `S*` (dimension: $d$)
+
+#### Important: Relationship between AuxHead and ConditionalDecoder
+
+| Module | Input Dimension | Purpose | Handling in Stage 3 |
+|:---|:---|:---|:---|
+| `AuxHead` | $d$ (`S*` only) | Stage 1 Guidance learning | **Discarded** |
+| `ConditionalDecoder` | $d + c$ (`S*` ⊕ `V_ctx`) | Inference from Stage 3 onwards | Trained from scratch |
+
+Stage 1's `AuxHead` and Stage 3's `ConditionalDecoder` are **physically separate modules due to different input dimensions**. `AuxHead` weights are not transferred to Stage 3; `ConditionalDecoder` is trained from scratch.
+
+-----
+
+## 3. Component Details
+
+### 3.1. Adapter (Manasikāra - Input Adaptation)
+
+**Function:** Projects and normalizes raw external input $X_{raw}$ to latent space.
+
+* **Interface:** `BaseAdapter`
+* **Implementations:** `MlpAdapter`, `CnnAdapter`, `LstmAdapter`, `TransformerAdapter`
+* **Output:** Latent vector $z \in \mathbb{R}^d$
+
+### 3.2. Augmenter (Input Perturbation)
+
+**Function:** Applies environmental noise or perturbation to input.
+
+* **Interface:** `BaseAugmenter`
+* **Implementations:** `IdentityAugmenter`, `GaussianNoiseAugmenter`
+* **Output:** `(x_augmented, severity)` - severity is per-sample noise intensity
+
+### 3.3. Vitakka (Search & Orientation)
+
+**Function:** Initial attractor search in latent space.
+
+1. **Active Resonance:** Calculates resonance between concept probes $\mathbf{P}$ and input
+2. **$S_0$ Generation:** Uses winner probe as Query to generate initial state
+
+* **Output:** `(s0, metadata)` - metadata includes winner_id, probs, etc.
+
+### 3.4. Vicara (Single-Step Refinement)
+
+**Function:** Single-step state update.
+
+$$S_{t+1} = (1 - \beta) S_t + \beta \Phi(S_t)$$
+
+* **Interface:** `BaseVicara`
+* **Implementations:** `StandardVicara`, `WeightedVicara`, `ProbeSpecificVicara`
+* **Responsibility:** Single-step update only. Loop control is delegated to SamathaEngine.
+
+**Variants:**
+
+| Class | Description |
+|:---|:---|
+| `StandardVicara` | State update with single Refiner. Simplest |
+| `WeightedVicara` | Weighted combination of multiple Refiners |
+| `ProbeSpecificVicara` | Selects Refiner based on Vitakka's winner probe/probability |
+
+### 3.5. Sati (Mindfulness - Convergence Check)
+
+**Function:** Convergence check and stopping control.
+
+* **Interface:** `BaseSati`
+* **Implementations:** `FixedStepSati`, `ThresholdSati`
+* **Stop Condition:** Stops when state change energy $||S_{t+1} - S_t||$ falls below threshold $\epsilon$
+
+### 3.6. Vipassana (Introspection)
+
+**Function:** Meta-cognition module that monitors Samatha's thinking log and evaluates logical consistency and confidence.
+
+* **Interface:** `BaseVipassana`
+* **Implementation:** `StandardVipassana`
+* **LogEncoder:** Compresses time-series log $\mathcal{T}$ into fixed-length vector
+  * **Recommended Implementation:** Bi-LSTM or Transformer Encoder (1-2 layers). A time-series model is essential to capture "order" of thinking and "acceleration of convergence".
+* **ConfidenceMonitor:** Detects "hesitation" or "contradiction", outputs trust score $\alpha$ and context vector $V_{ctx}$
+
+**Fallback Strategy:** When $\alpha < \text{threshold}$ during inference:
+
+* Output default answer ("I don't know")
+* Or maximize output distribution variance
+* Or trigger search/answer refusal
+
+-----
+
+## 4. Mathematical Formulation
+
+### 4.1. Samatha Phase (Convergence)
+
+**State update rule:**
+$$S_{t+1} = (1 - \beta) S_t + \beta \Phi(S_t)$$
+
+**Stop condition (Sati):**
+$$\text{Stop if } ||S_{t+1} - S_t|| < \epsilon_{sati}$$
+
+### 4.2. Vipassana Phase (Introspection)
+
+Calculates trust from thinking log $\mathcal{T} = [S_0, \dots, S^*]$.
+
+$$V_{ctx} = \text{Encoder}(\mathcal{T})$$
+$$\alpha = \sigma(\text{Linear}(V_{ctx})) \in [0, 1]$$
+
+* Target ($\hat{\alpha}$): Clean=1.0, Mismatch/Drunk=0.0
+
+### 4.3. Loss Function (Stage-wise)
+
+Objective function switches per training stage.
+
+* **Stage 0 (Adapter Pre-training):** Reconstruction Only
+    $$\mathcal{L}_0 = \mathcal{L}_{recon}(X, \hat{X}_{adapter})$$
+
+* **Stage 1 (Samatha Training):** Stability + Reconstruction + (Optional) Label Guidance
+    $$\mathcal{L}_1 = ||S_T - S_{T-1}||^2 + \lambda_r \mathcal{L}_{recon} + \lambda_g \mathcal{L}_{task}(y, \text{AuxHead}(S^*))$$
+
+* **Stage 2 (Vipassana Training):** Binary Cross Entropy (Contrastive)
+    $$\mathcal{L}_2 = \text{BCE}(\alpha, \hat{\alpha})$$
+
+* **Stage 3 (Decoder Fine-tuning):** Task Specific Loss
+    $$\mathcal{L}_3 = \mathcal{L}_{task}(y, \text{Decoder}(S^*, V_{ctx}))$$
+
+-----
+
+## 5. Data Structures
+
+### 5.1. SantanaLog (Thinking Trajectory)
+
+Object that records state history during the convergence process.
+
+```python
+class SantanaLog:
+    def add(self, state: Tensor) -> None:
+        """Add state to trajectory"""
+
+    def to_tensor(self) -> Tensor:
+        """Convert trajectory to tensor (Steps, Batch, Dim)"""
+
+    def __len__(self) -> int:
+        """Number of recorded steps"""
+```
+
+### 5.2. SystemOutput (Inference Output)
+
+```python
+@dataclass
+class SystemOutput:
+    output: Tensor        # Decoded result
+    s_star: Tensor        # Converged latent state
+    v_ctx: Tensor         # Vipassana context vector
+    trust_score: Tensor   # Trust score (0.0–1.0)
+    santana: SantanaLog   # Thinking trajectory
+    severity: Tensor      # Noise intensity
 ```
 
 -----
 
-## 5. Algorithm Flow
+## 6. Algorithm Flow
 
-1.  **Input:** Acquire data $X$.
-2.  **SamadhiEngine.forward(x, run_vitakka=True, run_vicara=True):
-    *   **Adapter:** $z = \text{Adapter}(x)$
-    *   **Vitakka (Optional):** $s_0, \text{meta} = \text{Vitakka}(z)$
-        *   Gate Decision (Threshold Check)
-    *   **Vicāra (Optional):**
-        *   Loop $t=1 \dots N$:
-            *   $S_{next} = \Phi(S_{curr})$
-            *   Update State with Inertia
-    *   **Decoder:** $\text{Output} = \text{Decoder}(S_{final})$
-3.  **Output:** Converged $S_{final}$, decoder output, and `Logs`.
+### 6.1. Inference Flow
+
+```python
+def inference(x: Tensor) -> SystemOutput:
+    # Phase 1: Samatha (Convergence)
+    s_star, santana, severity = samatha_engine(x, run_augmenter=False)
+
+    # Phase 2: Vipassana (Introspection)
+    v_ctx, trust_score = vipassana_engine(s_star, santana)
+
+    # Phase 3: Decode (Expression)
+    output = conditional_decoder(concat(s_star, v_ctx))
+
+    return SystemOutput(output, s_star, v_ctx, trust_score, santana, severity)
+```
+
+### 6.2. SamathaEngine Internal Flow
+
+```python
+def samatha_forward(x, noise_level=0.0, run_augmenter=True):
+    # Augment (training only)
+    if run_augmenter:
+        x_aug, severity = augmenter(x, noise_level)
+    else:
+        x_aug, severity = x, zeros(batch_size)
+
+    # Adapt
+    z = adapter(x_aug)
+
+    # Vitakka: Initial state generation
+    s0, metadata = vitakka(z)
+
+    # Vicara loop with Sati
+    santana = SantanaLog()
+    s_t = s0
+    santana.add(s_t)
+
+    for step in range(max_steps):
+        s_t = vicara(s_t, context=metadata)
+        santana.add(s_t)
+
+        should_stop, _ = sati(s_t, santana)
+        if should_stop:
+            break
+
+    return s_t, santana, severity
+```
 
 -----
 
-## 6. Recommended Hyperparameters
+## 7. Training Curriculum (4-Stage)
 
-Classification of keys used in `config` dictionary and recommended values.
+### 7.1. Training Policy
+
+| Stage | Name | Trainable | Frozen | Objective |
+|:---|:---|:---|:---|:---|
+| **0** | Adapter Pre-training | Adapter, adapter_recon_head | All others | Reconstruction Loss |
+| **1** | Samatha Training | Adapter, Vitakka, Vicara, Sati, (samatha_recon_head, AuxHead) | Vipassana, TaskDecoder | Stability + Recon + (Guidance) |
+| **2** | Vipassana Training | Vipassana | All others | BCE (Contrastive) |
+| **3** | Decoder Fine-tuning | TaskDecoder | All others | Task Specific Loss |
+
+### 7.2. Stage 2 Noise Generation Strategy
+
+Three data generation strategies to teach Vipassana meta-cognition:
+
+1. **Environmental Ambiguity (Augmented Path)**
+   * Add noise to input data
+   * Target: `1.0 - severity`
+
+2. **Internal Dysfunction (Drunk Path)**
+   * Perturb SamathaEngine internals (`drunk_mode=True`)
+   * Specific implementations: Increase Dropout rate in Vicara, add temporary noise to Refiner weights, disturb Vitakka's temperature parameter, etc.
+   * Target: `0.0`
+
+3. **Logical Inconsistency (Mismatch Path)**
+   * Shuffle S* and SantanaLog within batch
+   * Target: `0.0`
+
+-----
+
+## 8. Hyperparameters
 
 ### Model Architecture
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`dim`** | $d$ | 64 - 512 | Dimension of latent state vector. |
-| **`input_dim`** | $D_{input}$ | - | Dimension of input data. |
-| **`seq_len`** | $L$ | 10 - 60 | *(Time Series Model Only)* Sequence length. |
-| **`n_probes`** | $K$ | 16 - 64 | Number of concept probes. |
-| **`vicara_type`** | - | `"probe_specific"` | `"standard"` (Shared) or `"probe_specific"` (Individual). |
-| **`probe_trainable`** | - | `True` | Whether to train probes themselves. |
-| **`adapter_hidden_dim`** | $D_{hidden}$ | 256 | Hidden layer dimension in Adapter. |
 
-### Vitakka (Search)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`gate_threshold`** | $\theta$ | 0.3 - 0.5 | Strength to reject delusion (noise). |
-| **`softmax_temp`** | $\tau$ | 0.1 - 0.2 | Lower values select "One-pointedness (Single Theme)". |
+| Key | Symbol | Recommended | Description |
+|:---|:---|:---|:---|
+| `latent_dim` | $d$ | 64-256 | Latent space dimension |
+| `context_dim` | $c$ | 32-128 | Vipassana output dimension |
+| `num_probes` | $K$ | 8-32 | Number of Vitakka probes |
+| `max_steps` | $T$ | 6-20 | Maximum Vicara steps |
 
-### Vicara (Refinement)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`refine_steps`** | $T_{max}$ | 5 - 10 | Number of recursive refinement steps. |
-| **`inertia`** | $\beta$ | 0.7 | Inertia of state update. |
+### Training Strategy
 
-### Training (Objective Params)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`stability_coeff`** | $\lambda_{stab}$ | 0.01 | Strength promoting state convergence. |
-| **`entropy_coeff`** | $\lambda_{ent}$ | 0.1 | Strength penalizing ambiguous search results. |
-| **`balance_coeff`** | $\lambda_{bal}$ | 0.001 | Equalizes frequency of probe usage. |
-| **`anomaly_margin`** | `5.0` | - | *(AnomalyObjective)* Margin for anomalous data. |
-| **`anomaly_weight`** | `1.0` | - | *(AnomalyObjective)* Penalty weight for anomalous data. |
+| Key | Symbol | Recommended | Description |
+|:---|:---|:---|:---|
+| `sati_threshold` | $\epsilon$ | 1e-4 | Convergence threshold |
+| `beta` | $\beta$ | 0.3-0.7 | State update inertia parameter |
+| `guidance_weight` | $\lambda_g$ | 0.1-0.5 | (Stage 1) Guidance loss strength |
+| `recon_weight` | $\lambda_r$ | 0.1-0.3 | Reconstruction loss strength |
 
 -----
 
-## 7. Core Dynamics: Divergence vs. Convergence
+## 9. Core Dynamics: Divergence vs. Convergence
 
-Contrasting the core dynamics of the Samadhi Framework, which is based on convergence, with traditional generative models that take a divergent approach.
+The core dynamics of Satipatthana Framework is based on convergence, contrasting with the divergent approach of traditional generative models.
 
 | Feature | Divergent Models | **Convergent Models** |
-| :--- | :--- | :--- |
+|:---|:---|:---|
 | **Basic Operation** | Sequence Prediction, Generation, Divergence | State Purification, Stabilization, Convergence |
 | **Time Dependency** | Dependent on Context History | Dependent only on Current State (Markovian) |
 | **Attention** | Self-Attention (Between Elements) | Recursive Attention (Between State-Probe) |
-| **Nature of Inference** | **Open/Infinite**<br>Can continue indefinitely | **Closed/Finite**<br>Settles to a point |
-| **Explainability** | Limited (Attention Map, etc.) | **Extremely High (Probe/Cetanā Log)** |
+| **Nature of Inference** | Open/Infinite | **Closed/Finite** |
+| **Explainability** | Limited | **Extremely High (SantanaLog)** |
 | **Philosophical Basis** | Association, Generation, Expansion | **Meditation (Samadhi), Insight, Essence Extraction** |
 
 -----
 
-## 8. Applications & Training Strategies
+## 10. Applications & Training Strategies
 
-The Samadhi Framework can be applied to different tasks by combining **Training Strategies (Trainer + Objective)** and **Decoders**.
+For supervised tasks, actively use **Stage 1 Guidance (AuxHead)** to optimize Samatha's convergence space for the task.
 
-| Application Task | Objective | Decoder Role | Loss Function |
-| :--- | :--- | :--- | :--- |
-| **Structure Discovery / Clustering**<br>(Unsupervised) | `UnsupervisedObjective` | **Identity** | Stability + Entropy + Sparsity<br>(Pursuing only internal state stabilization) |
-| **Autoencoder Pre-training**<br>(Pre-training) | `AutoencoderObjective` | **Reconstruction** | Reconstruction Loss Only<br>(Minimize reconstruction error, skip Vicara) |
-| **Anomaly Detection** | `AnomalyObjective` | **Reconstruction** | Recon + Stability + Margin<br>(Reconstruct normal data, reject anomalous data) |
-| **Supervised Task**<br>(Classification) | `SupervisedClassificationObjective` | **Classifier** | CrossEntropy + Stability<br>(Target prediction) |
-| **Supervised Task**<br>(Regression) | `SupervisedRegressionObjective` | **Regressor** | MSE + Stability<br>(Target prediction) |
-| **Supervised Task**<br>(Robust Regression) | `RobustRegressionObjective` | **Regressor** | Huber / L1 + Stability<br>(Target prediction robust to outliers) |
-| **Semantic Similarity Learning**<br>(Unsupervised) | `CosineSimilarityObjective` | **Identity** / **Reconstruction** | Cosine Embedding Loss + Stability<br>(Align directionality of input and reconstruction) |
-
-*   **Meditation Mode (Unsupervised):** Discover inherent structures (Dharma) in data without relying on external labels.
-*   **Expression Mode (Supervised/Anomaly):** Solve external tasks (classification, detection) using the discovered structures.
+| Application Task | Stage 1 Strategy | Stage 2 Role | Stage 3 Decoder |
+|:---|:---|:---|:---|
+| **Supervised Classification** | Guidance (CE Loss) | Hallucination Check | Classifier (Softmax) |
+| **Supervised Regression** | Guidance (MSE Loss) | Uncertainty Est. | Regressor (Linear) |
+| **Anomaly Detection** | Reconstruction Only | Anomaly Score (final output) | Identity |
+| **Structure Discovery** | Stability Only | Boundary Detection | None |
 
 -----
 
-## 9. Integration with Large Language Models (LLMs)
+## 11. Integration with Large Language Models (LLMs)
 
-Samadhi's "Convergence/Stabilization" and LLM's "Generation/Divergence" are complementary.
+This architecture functions as a countermeasure against LLM "Hallucination".
 
-*   **LLM (Generator):** Responsible for divergent thinking, token prediction, and context generation.
-*   **Samadhi (Stabilizer):** Responsible for convergent thinking, state purification, and fixing intention.
-
-Key Integrations:
-1.  **Intent Stabilization:** Purify LLM output with Samadhi to achieve consistent dialogue without drift.
-2.  **Prompt Refinement:** Purify user input into a clear instruction vector for the LLM.
-3.  **Output Verification:** Detect LLM hallucinations using the Convergence Score (Stability Score).
+1. **Thinking Phase:** Converge LLM Hidden States with Samatha to verify context consistency
+2. **Introspection Phase:** Vipassana detects "confident lies (Mismatch)"
+3. **Expression Phase:** If score is low, take safety measures (search trigger, answer refusal)
 
 -----
 
-## 10. Architectural Extensibility
+## 12. Architectural Extensibility
 
-Components can be freely combined using `SamadhiBuilder` or `presets`.
+Components can be freely combined using `SystemConfig` and various `ComponentConfig`.
 
-### 10.1. Task-Specific Customization Example
+### 12.1. Task-Specific Customization Example
 
-| Task | Adapter | Refiner | Decoder | Objective |
-| :--- | :--- | :--- | :--- | :--- |
-| **Time Series Anomaly Detection** | LSTM | MLP | Reconstruction | AnomalyObjective |
-| **Image Classification** | CNN | MLP | Classification | SupervisedObjective |
-| **Dialogue Intent Estimation** | Transformer | Attention | Classification | SupervisedObjective |
-| **Robot Control** | Sensor Fusion | MLP | Action | RL (PPO) |
+| Task | Adapter | Augmenter | Vicara | Decoder |
+|:---|:---|:---|:---|:---|
+| **Time Series Anomaly Detection** | LSTM | Gaussian | Standard | Reconstruction |
+| **Image Classification** | CNN | Identity | Standard | Conditional |
+| **Dialogue Intent Estimation** | Transformer | Identity | ProbeSpecific | Conditional |
+| **Robot Control** | MLP | Gaussian | Weighted | Conditional |
 
-```
+### 12.2. Config Example
+
+```python
+from satipatthana.configs import SystemConfig, SamathaConfig, VipassanaEngineConfig
+from satipatthana.configs import create_adapter_config, create_vicara_config
+
+config = SystemConfig(
+    samatha=SamathaConfig(
+        adapter=create_adapter_config("mlp", input_dim=784, latent_dim=64),
+        augmenter=AugmenterConfig(type=AugmenterType.GAUSSIAN, max_noise_std=0.3),
+        vitakka=VitakkaConfig(num_probes=16),
+        vicara=create_vicara_config("standard", latent_dim=64),
+        sati=SatiConfig(type=SatiType.THRESHOLD, threshold=1e-4),
+    ),
+    vipassana=VipassanaEngineConfig(
+        vipassana=StandardVipassanaConfig(context_dim=32),
+    ),
+    use_label_guidance=True,
+)
 ```

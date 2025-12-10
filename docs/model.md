@@ -1,286 +1,416 @@
-# Samadhi Framework (Deep Convergence Architecture) Specification
+# Satipatthana Framework (Introspective Deep Convergence Architecture) Specification
 
-**Version:** 3.0 (Framework Modularization)
+**Version:** 4.0 (The Three Engines & Guided Convergence)
 **Status:** Active Specification
 
 -----
 
 ## 1. 概念定義 (Concept Definition)
 
-**Samadhi Framework**は、カオス的な情報ストリームから対象の『本質的構造の抽出（State Refinement）』と『内部状態の不動化（Convergence）』を目的とした、**再帰型アテンション・アーキテクチャ**である。これは、情報が発散的に拡散するのではなく、収束的に秩序を形成するアプローチを採る。
+**Satipatthana Framework**は、カオス的な情報ストリームから対象の『本質的構造への収束（Samatha）』を行い、その過程を『内省（Vipassana）』することで、自身の信頼度を説明できる**内省型・再帰的アテンション・アーキテクチャ**である。
 
-  * **Core Philosophy:** 情報の水平的な拡張（Divergence/Generation）ではなく、垂直的な深化（Convergence/Insight）を行う。
-  * **Output:** エントロピーが極小化された単一の不変状態ベクトル（Latent Point Attractor）。
-  * **Operational Mode:** 開かれた系（Open System）から閉じた系（Closed System）への動的な移行。
+Satipatthana（念処）という名称は「気づき（Sati）の確立」を意味し、自己観察・内省を通じて真実を見極めるという本アーキテクチャの本質を象徴している。
+
+* **Core Philosophy:** 従来の「発散・生成」モデルに対し、「収束・内省・表現」の3段階アプローチを採る。
+* **Operational Mode:** 4段階のカリキュラム（Adapter -> Samatha -> Vipassana -> Decoder）による段階的な知性獲得。
 
 -----
 
 ## 2. システムアーキテクチャ (System Architecture)
 
-本フレームワークは、モジュール化されたコンポーネント群（Adapter, Vitakka, Vicara, Decoder）を組み合わせることで構築される。
+本フレームワークは、3つの主要エンジン（Samatha, Vipassana, Decoder）と、それらを構成するモジュラーコンポーネント群によって構成される。
 
-### Adapter (Manasikāra - Input Adaptation)
+### 2.1. データフロー概要
 
-**機能:** 異なるモダリティ（画像、時系列、テキストなど）を持つ生の外部入力 $X_{raw}$ を、モデル固有の潜在空間（Samadhi Space）へ投影・正規化する。
-
-*   **Role:** 外界の信号を、モデルが扱える「意味の形式」へと変換する（作意）。
-*   **Interface:** `BaseAdapter` (`samadhi/components/adapters/base.py`)
-*   **Implementations:**
-    *   *MlpAdapter:* タブラーデータやフラットなベクトル用。
-    *   *CnnAdapter:* 画像データ用 (Conv2d)。
-    *   *LstmAdapter:* 時系列データ用 (LSTM)。
-    *   *TransformerAdapter:* 系列データ用 (Transformer Encoder)。
-*   **Output:** 潜在ベクトル $X_{adapted} \in \mathbb{R}^d$。
-
-### Vitakka (Search & Orientation)
-
-**機能:** カオス的な入力ストリーム（$X_{adapted}$）から、収束に値する初期アトラクタ（種）を発見し、方向付けを行う。
-
-*   **Interface:** `BaseVitakka` (`samadhi/components/vitakka/base.py`)
-1.  **Concept Probes ($\mathbf{P}$):**
-      * システムは $K$ 個の「概念プローブ（基底ベクトル）」を持つ。
-2.  **Active Resonance:**
-      * 入力 $X$ とプローブ群 $\mathbf{P}$ の共鳴度（内積）を計算する。
-      * **Lateral Inhibition (側方抑制):** Softmax温度パラメータ $\tau$ を低く設定し、最も強いプローブ（勝者）を際立たせる。
-3.  **Confidence Gating (Anti-Hallucination):**
-      * 最大共鳴度が閾値 $\theta_{gate}$ を下回る場合、入力を「ノイズ（雑念）」とみなし、処理を遮断（Gate Closed）する。
-4.  **$S_0$ Slice Generation:**
-      * 勝者プローブ $p_{win}$ をQueryとして入力 $X$ をAttentionで切り取り、初期状態 $S_0$ を生成する。
-
-### Vicāra (Recurrent Refinement)
-
-**機能:** 外部入力を遮断し、内部状態を再帰的に純化する。
-
-*   **Interface:** `BaseVicara` (`samadhi/components/vicara/base.py`)
-*   **Implementations:**
-    *   *StandardVicara:* 単一の汎用Refiner ($\\Phi$) を共有する。
-    *   *WeightedVicara:* 複数のRefinerの重み付き和を使用。
-    *   *ProbeSpecificVicara:* 各概念プローブ $p_k$ に対応する専用のRefiner ($\\Phi_k$) を持つ。
-
-1.  **Isolation:** $t > 0$ において、外部入力 $X$ へのゲートを閉じ、自己ループのみにする。
-2.  **Refinement Loop:**
-      * **Hard Attention Mode (Inference):** 勝者プローブに対応するRefiner $\\Phi_{win}$ のみを適用する。
-          * $S_{t+1} = \\Phi_{win}(S_t)$
-      * **Soft Attention Mode (Training):** 全プローブの確率分布に基づく重み付き和で更新する（勾配伝播のため）。
-          * $S_{t+1} = \sum_k w_k \\Phi_k(S_t)$
-3.  **Convergence Check:**
-      * 状態変化量 $||S_{t+1} - S_t||$ が $\\epsilon$ 未満になった時点で「Appanā (没入)」とみなし、推論を終了する。
-
-### Refiner (Internal Dynamics)
-
-**機能:** 潜在空間内での状態遷移（力学系）を定義する、Vicāra内部の実行ユニット。
-
-*   **Interface:** `BaseRefiner` (`samadhi/components/refiners/base.py`)
-*   **Implementations:**
-    *   *MlpRefiner:* 全結合層と活性化関数によるシンプルな状態更新。
-    *   *GruRefiner:* (Future) GRUセルを用いた、記憶を持つ状態更新。
-    *   *AttentionRefiner:* (Future) Self-Attentionを用いた状態間の関係性整理。
-
-### Sati-Sampajañña (Meta-Cognition & Logging)
-
-**機能:** システムの挙動を「因果的な物語」として記録し、説明可能性 (XAI) を担保する。
-
-1.  **Probe Log (瞬間の気づき):** そのステップで何が選ばれたか。
-2.  **Cetanā Dynamics (時間の流れ):** 前ステップとの比較による、意図の遷移（持続、転換、拡散）の追跡。
-
-### Decoder (Expression - Output Reconstruction)
-
-**機能:** 収束・純化された潜在状態 $S_{final}$ を、元の入力形式やターゲット形式に復元・変換する。
-
-*   **Role:** 内的な洞察（Insight）を、外的な表現（Expression）へと戻す。
-*   **Interface:** `BaseDecoder` (`samadhi/components/decoders/base.py`)
-*   **Implementations:**
-    *   *ReconstructionDecoder:* $S_{final}$ を元の入力次元に戻す（Autoencoder用）。
-    *   *CnnDecoder:* 画像再構成用。
-    *   *LstmDecoder / SimpleSequenceDecoder:* 系列再構成用。
-*   **Output:** 再構成データ $\hat{X}$ または予測値 $Y$。
-
------
-
-## 3. 数理モデル (Mathematical Formulation)
-
-### 3.1. Vitakka Phase (Resonance)
-
-入力 $X \in \mathbb{R}^{L \times d}$ に対するプローブ $p_k$ の共鳴スコア $R_k$:
-
-$Score_k = || \frac{1}{\\sqrt{d}} \sum_{i=1}^{L} \text{Softmax}(p_k^T x_i) \cdot x_i ||$
-
-勝者決定と確率分布（側方抑制付き）:
-$\hat{w} = \text{Softmax}\left( \frac{[Score_1, \dots, Score_K]}{\tau} \right)$
-
-### 3.2. Initialization ($S_0$)
-
-ゲート $G \in \{0, 1\}$ による初期状態の決定:
-$S_0 = G \cdot \text{Attention}(Q=p_{win}, K=X, V=X)$
-ここで、$G = 1 \text{ if } \max(Score) > \theta_{gate} \text{ else } 0$.
-
-### 3.3. Vicāra Phase (State Transition)
-
-1次マルコフ過程としての更新則:
-$S_{t+1} = (1 - \beta) S_t + \beta \Phi_k(S_t)$
-
-  * $\beta$: 更新率（慣性項）。急激な変化を防ぎ、安定した軌道を描かせる。
-  * $\Phi_k$: 選択された概念 $k$ に固有の写像関数（Probe-Specificの場合）。
-  * $\lim_{t \to \infty} || S_{t+1} - S_t || = 0$ (不動点への収束)
-
-### 3.4. Loss Function (Stability Loss)
-
-学習時の目的関数は、選択された `Objective` によって決定される。基本形は以下の通り:
-$\mathcal{L} = \underbrace{|| S_{T} - S_{T-1} ||^2}_{Stability} + \lambda_1 \underbrace{\sum |S_T|}_{Sparsity} - \lambda_2 \underbrace{I(S_T; S_0)}_{Info Retention}$
-
------
-
-## 4. データ構造仕様 (Data Structures)
-
-### 4.1. Probe Log (Snapshot)
-
-各推論ステップごとのメタデータ。
-
-```json
-{
-  "timestamp": 12345678,
-  "intention": {
-    "winner_id": 3,
-    "winner_label": "Logical_Causality",
-    "confidence": 0.94,
-    "gate_status": "OPEN",
-    "entropy": 0.05
-  },
-  "raw_scores": [0.01, 0.02, 0.01, 0.94, 0.02]
-}
+```txt
+Raw Input (X)
+    ↓
+[SamathaEngine]
+    Augmenter → Adapter → Vitakka → Vicara loop (w/ Sati) → S*, SantanaLog
+    ↓
+[VipassanaEngine]
+    S* + SantanaLog → V_ctx, α (trust_score)
+    ↓
+[ConditionalDecoder]
+    S* + V_ctx → Output (Y)
 ```
 
-### 4.2. Cetanā Dynamics Log (Transition)
+### 2.2. Engine 1: SamathaEngine (The Meditator)
 
-時間的な意図の流れを記述するログ。
+**役割:** 世界モデル。いかなる入力も「意味のある点」に収束させる。
 
-```json
-{
-  "step": 5,
-  "transition": {
-    "from": "Breath_Rhythm",
-    "to": "Body_Sensation",
-    "type": "Shift",
-    // Types: "Sustain", "Shift", "Distracted", "Deepening"
-    "attention_shift_magnitude": 0.45,
-    "smoothness": 0.8
-  }
-}
+**入力:** Raw Data `X` (Batch, *)
+**出力:**
+
+* `S*` (Batch, Dim): 収束した潜在状態
+* `SantanaLog`: 思考軌跡を記録したオブジェクト
+* `severity` (Batch,): ノイズ強度（Vipassanaターゲット用）
+
+**構成コンポーネント:**
+
+| コンポーネント | 役割 |
+|:---|:---|
+| **Adapter** | 生入力を潜在空間へ投影・正規化 |
+| **Augmenter** | 入力にノイズ/摂動を付与（学習時） |
+| **Vitakka** | プローブベースの初期状態 $S_0$ 生成 |
+| **Vicara** | 1ステップの状態更新 ($S_t \rightarrow S_{t+1}$) |
+| **Sati** | 収束判定・停止制御 |
+
+**特徴:** タスクやラベルには依存せず、「構造の抽出」のみを行う。`drunk_mode` フラグにより内部的な摂動制御が可能。
+
+### 2.3. Engine 2: VipassanaEngine (The Observer)
+
+**役割:** メタ認知。Samathaの思考プロセス（ログ）が健全だったか監視する。
+
+**入力:** `S*` (Batch, Dim) + `SantanaLog`
+**出力:**
+
+* `V_ctx` (Batch, context_dim): デコーダーへのヒント情報（「迷い」の埋め込み表現）
+* `α` (Batch, 1): 信頼度スコア (0.0〜1.0)
+
+**構成:** `StandardVipassana` (LogEncoder + ConfidenceMonitor)
+
+### 2.4. Engine 3: ConditionalDecoder (The Speaker)
+
+**役割:** 表現。状態と文脈を統合して、人間にわかる形にする。
+
+**入力:** `S*` (Batch, Dim) + `V_ctx` (Batch, context_dim) → Concatenate → (Batch, Dim + context_dim)
+**出力:** `Y` (Batch, output_dim)
+
+**特徴:** 「自信がない時は、自信がないような出力（分散を広げる等）」が可能になり、**謙虚な表現**を実現する。**推論時に使用される唯一のDecoder**。
+
+### 2.5. Reconstruction Heads & AuxHead (学習補助)
+
+学習の安定化を目的とした補助モジュール。**推論時には使用されない。**
+
+* **`adapter_recon_head`** (Stage 0用): Adapterの出力 `z` から元入力を再構成
+* **`samatha_recon_head`** (Stage 1用): 収束点 `S*` から元入力を再構成
+* **`AuxHead`** (Stage 1用): `S*` (次元: $d$) からタスク予測を行う補助ヘッド
+
+**重要: AuxHead と ConditionalDecoder の関係**
+
+| モジュール | 入力次元 | 用途 | Stage 3での扱い |
+|:---|:---|:---|:---|
+| `AuxHead` | $d$ (`S*`のみ) | Stage 1のGuidance学習 | **破棄** |
+| `ConditionalDecoder` | $d + c$ (`S*` ⊕ `V_ctx`) | Stage 3以降の推論 | 新規学習 |
+
+Stage 1の `AuxHead` と Stage 3の `ConditionalDecoder` は**入力次元が異なるため、物理的に別モジュール**である。`AuxHead` の重みは Stage 3 には転移されず、`ConditionalDecoder` はゼロから学習される。
+
+-----
+
+## 3. コンポーネント詳細 (Component Details)
+
+### 3.1. Adapter (Manasikāra - Input Adaptation)
+
+**機能:** 生の外部入力 $X_{raw}$ を潜在空間へ投影・正規化する。
+
+* **Interface:** `BaseAdapter`
+* **実装:** `MlpAdapter`, `CnnAdapter`, `LstmAdapter`, `TransformerAdapter`
+* **Output:** 潜在ベクトル $z \in \mathbb{R}^d$
+
+### 3.2. Augmenter (Input Perturbation)
+
+**機能:** 入力に対して環境ノイズや摂動を加える。
+
+* **Interface:** `BaseAugmenter`
+* **実装:** `IdentityAugmenter`, `GaussianNoiseAugmenter`
+* **Output:** `(x_augmented, severity)` - severityはサンプルごとのノイズ強度
+
+### 3.3. Vitakka (Search & Orientation)
+
+**機能:** 潜在空間内での初期アトラクタ探索。
+
+1. **Active Resonance:** 概念プローブ群 $\mathbf{P}$ と入力の共鳴度を計算
+2. **$S_0$ Generation:** 勝者プローブをQueryとして初期状態を生成
+
+* **Output:** `(s0, metadata)` - metadataにはwinner_id, probs等を含む
+
+### 3.4. Vicara (Single-Step Refinement)
+
+**機能:** 1ステップの状態更新。
+
+$$S_{t+1} = (1 - \beta) S_t + \beta \Phi(S_t)$$
+
+* **Interface:** `BaseVicara`
+* **実装:** `StandardVicara`, `WeightedVicara`, `ProbeSpecificVicara`
+* **責務:** 単一ステップの更新のみ。ループ制御はSamathaEngineに委譲。
+
+**バリエーション:**
+
+| クラス | 説明 |
+|:---|:---|
+| `StandardVicara` | 単一Refinerで状態更新。最もシンプル |
+| `WeightedVicara` | 複数Refinerの重み付け合成 |
+| `ProbeSpecificVicara` | Vitakkaの勝者Probe/確率に基づきRefinerを選択 |
+
+### 3.5. Sati (Mindfulness - Convergence Check)
+
+**機能:** 収束判定と停止制御。
+
+* **Interface:** `BaseSati`
+* **実装:** `FixedStepSati`, `ThresholdSati`
+* **Stop Condition:** 状態変化エネルギー $||S_{t+1} - S_t||$ が閾値 $\epsilon$ を下回った時点で停止
+
+### 3.6. Vipassana (Introspection)
+
+**機能:** Samathaの思考ログを監視し、論理的整合性と信頼度を評価するメタ認知モジュール。
+
+* **Interface:** `BaseVipassana`
+* **実装:** `StandardVipassana`
+* **LogEncoder:** 時系列ログ $\mathcal{T}$ を固定長ベクトルに圧縮
+  * **推奨実装:** Bi-LSTM または Transformer Encoder (1-2 layers)。思考の「順序」と「収束の加速度」を捉えるには時系列モデルが必須。
+* **ConfidenceMonitor:** 「迷い」や「矛盾」を検知し、信頼度スコア $\alpha$ と文脈ベクトル $V_{ctx}$ を出力
+
+**フォールバック戦略:** 推論時に $\alpha < \text{threshold}$ の場合：
+
+* デフォルト回答（"I don't know"）を出力
+* または出力分布の分散（Variance）を最大化
+* または検索トリガー/回答拒否を発動
+
+-----
+
+## 4. 数理モデル (Mathematical Formulation)
+
+### 4.1. Samatha Phase (Convergence)
+
+**状態更新則:**
+$$S_{t+1} = (1 - \beta) S_t + \beta \Phi(S_t)$$
+
+**停止条件 (Sati):**
+$$\text{Stop if } ||S_{t+1} - S_t|| < \epsilon_{sati}$$
+
+### 4.2. Vipassana Phase (Introspection)
+
+思考ログ $\mathcal{T} = [S_0, \dots, S^*]$ から信頼度を算出する。
+
+$$V_{ctx} = \text{Encoder}(\mathcal{T})$$
+$$\alpha = \sigma(\text{Linear}(V_{ctx})) \in [0, 1]$$
+
+* Target ($\hat{\alpha}$): Clean=1.0, Mismatch/Drunk=0.0
+
+### 4.3. Loss Function (Stage-wise)
+
+学習ステージごとに目的関数が切り替わる。
+
+* **Stage 0 (Adapter Pre-training):** Reconstruction Only
+    $$\mathcal{L}_0 = \mathcal{L}_{recon}(X, \hat{X}_{adapter})$$
+
+* **Stage 1 (Samatha Training):** Stability + Reconstruction + (Optional) Label Guidance
+    $$\mathcal{L}_1 = ||S_T - S_{T-1}||^2 + \lambda_r \mathcal{L}_{recon} + \lambda_g \mathcal{L}_{task}(y, \text{AuxHead}(S^*))$$
+
+* **Stage 2 (Vipassana Training):** Binary Cross Entropy (Contrastive)
+    $$\mathcal{L}_2 = \text{BCE}(\alpha, \hat{\alpha})$$
+
+* **Stage 3 (Decoder Fine-tuning):** Task Specific Loss
+    $$\mathcal{L}_3 = \mathcal{L}_{task}(y, \text{Decoder}(S^*, V_{ctx}))$$
+
+-----
+
+## 5. データ構造仕様 (Data Structures)
+
+### 5.1. SantanaLog (思考軌跡)
+
+収束過程の状態履歴を記録するオブジェクト。
+
+```python
+class SantanaLog:
+    def add(self, state: Tensor) -> None:
+        """状態を軌跡に追加"""
+
+    def to_tensor(self) -> Tensor:
+        """軌跡をテンソル化 (Steps, Batch, Dim)"""
+
+    def __len__(self) -> int:
+        """記録されたステップ数"""
+```
+
+### 5.2. SystemOutput (推論出力)
+
+```python
+@dataclass
+class SystemOutput:
+    output: Tensor        # デコード結果
+    s_star: Tensor        # 収束した潜在状態
+    v_ctx: Tensor         # Vipassanaの文脈ベクトル
+    trust_score: Tensor   # 信頼度スコア (0.0〜1.0)
+    santana: SantanaLog   # 思考軌跡
+    severity: Tensor      # ノイズ強度
 ```
 
 -----
 
-## 5. 処理フロー (Algorithm Flow)
+## 6. 処理フロー (Algorithm Flow)
 
-1.  **Input:** データ $X$ を取得。
-2.  **SamadhiEngine.forward(x, run_vitakka=True, run_vicara=True):**
-    *   **Adapter:** $z = \text{Adapter}(x)$
-    *   **Vitakka (Optional):** $s_0, \text{meta} = \text{Vitakka}(z)$
-        *   Gate Decision (Threshold Check)
-    *   **Vicāra (Optional):**
-        *   Loop $t=1 \dots N$:
-            *   $S_{next} = \Phi(S_{curr})$
-            *   Update State with Inertia
-    *   **Decoder:** $\text{Output} = \text{Decoder}(S_{final})$
-3.  **Output:** 収束した $S_{final}$, デコーダ出力, および `Logs` を出力。
+### 6.1. 推論フロー (Inference)
 
------
+```python
+def inference(x: Tensor) -> SystemOutput:
+    # Phase 1: Samatha (収束)
+    s_star, santana, severity = samatha_engine(x, run_augmenter=False)
 
-## 6. パラメータ設定推奨値 (Hyperparameters)
+    # Phase 2: Vipassana (内省)
+    v_ctx, trust_score = vipassana_engine(s_star, santana)
 
-コード内の `config` 辞書で使用されるキーと、推奨される設定値の分類。
+    # Phase 3: Decode (表現)
+    output = conditional_decoder(concat(s_star, v_ctx))
 
-### モデル・アーキテクチャ (Model Architecture)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`dim`** | $d$ | 64 - 512 | 潜在状態ベクトルの次元数。 |
-| **`input_dim`** | $D_{input}$ | - | 入力データの次元。 |
-| **`seq_len`** | $L$ | 10 - 60 | *(時系列モデルのみ)* シーケンス長。 |
-| **`n_probes`** | $K$ | 16 - 64 | 概念プローブの数。 |
-| **`vicara_type`** | - | `"probe_specific"` | `"standard"` (共有) か `"probe_specific"` (個別) か。 |
-| **`probe_trainable`** | - | `True` | プローブ自体を学習するか。 |
-| **`adapter_hidden_dim`** | $D_{hidden}$ | 256 | アダプター内の隠れ層の次元。 |
+    return SystemOutput(output, s_star, v_ctx, trust_score, santana, severity)
+```
 
-### Vitakka (Search)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`gate_threshold`** | $\theta$ | 0.3 - 0.5 | 妄想（ノイズ）を弾く強度。 |
-| **`softmax_temp`** | $\tau$ | 0.1 - 0.2 | 低いほど「一境性（単一テーマ）」を選び取る。 |
+### 6.2. SamathaEngine内部フロー
 
-### Vicara (Refinement)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`refine_steps`** | $T_{max}$ | 5 - 10 | 再帰的精製ステップ数。 |
-| **`inertia`** | $\beta$ | 0.7 | 状態更新の慣性。 |
+```python
+def samatha_forward(x, noise_level=0.0, run_augmenter=True):
+    # Augment (学習時のみ)
+    if run_augmenter:
+        x_aug, severity = augmenter(x, noise_level)
+    else:
+        x_aug, severity = x, zeros(batch_size)
 
-### Training (Objective Params)
-| Key | Symbol | Recommended Value | Description |
-| :--- | :--- | :--- | :--- |
-| **`stability_coeff`** | $\lambda_{stab}$ | 0.01 | 状態の不動化を促す強さ。 |
-| **`entropy_coeff`** | $\lambda_{ent}$ | 0.1 | 曖昧な検索結果を罰する強さ。 |
-| **`balance_coeff`** | $\lambda_{bal}$ | 0.001 | プローブの使用頻度を均一化する。 |
-| **`anomaly_margin`** | `5.0` | - | *(AnomalyObjective)* 異常データのマージン。 |
-| **`anomaly_weight`** | `1.0` | - | *(AnomalyObjective)* 異常データに対するペナルティの重み。 |
+    # Adapt
+    z = adapter(x_aug)
+
+    # Vitakka: 初期状態生成
+    s0, metadata = vitakka(z)
+
+    # Vicara loop with Sati
+    santana = SantanaLog()
+    s_t = s0
+    santana.add(s_t)
+
+    for step in range(max_steps):
+        s_t = vicara(s_t, context=metadata)
+        santana.add(s_t)
+
+        should_stop, _ = sati(s_t, santana)
+        if should_stop:
+            break
+
+    return s_t, santana, severity
+```
 
 -----
 
-## 7. 基本動作の対比 (Core Dynamics: Divergence vs. Convergence)
+## 7. 学習カリキュラム (4-Stage Curriculum)
 
-Samadhi Frameworkの基本動作は、従来の生成モデルがとる発散的なアプローチとは対照的に、収束を基盤としています。
+### 7.1. 学習ポリシー
 
-| 特徴 | 発散モデル (Divergent Models) | **収束モデル (Convergent Models)** |
-| :--- | :--- | :--- |
+| Stage | Name | Train対象 | Freeze対象 | 目的関数 |
+|:---|:---|:---|:---|:---|
+| **0** | Adapter Pre-training | Adapter, adapter_recon_head | 他すべて | Reconstruction Loss |
+| **1** | Samatha Training | Adapter, Vitakka, Vicara, Sati, (samatha_recon_head, AuxHead) | Vipassana, TaskDecoder | Stability + Recon + (Guidance) |
+| **2** | Vipassana Training | Vipassana | 他すべて | BCE (Contrastive) |
+| **3** | Decoder Fine-tuning | TaskDecoder | 他すべて | Task Specific Loss |
+
+### 7.2. Stage 2 ノイズ生成戦略
+
+Vipassanaにメタ認知能力を習得させるための3種類のデータ生成戦略:
+
+1. **Environmental Ambiguity (Augmented Path)**
+   * 入力データへのノイズ付与
+   * Target: `1.0 - severity`
+
+2. **Internal Dysfunction (Drunk Path)**
+   * SamathaEngine内部の摂動（`drunk_mode=True`）
+   * 具体的実装: Vicara内のDropout率を上げる、Refinerの重みに一時的ノイズを加算、Vitakkaの温度パラメータを乱す等
+   * Target: `0.0`
+
+3. **Logical Inconsistency (Mismatch Path)**
+   * バッチ内でS*とSantanaLogをシャッフル
+   * Target: `0.0`
+
+-----
+
+## 8. パラメータ設定推奨値 (Hyperparameters)
+
+### Model Architecture
+
+| Key | Symbol | Recommended | Description |
+|:---|:---|:---|:---|
+| `latent_dim` | $d$ | 64-256 | 潜在空間の次元 |
+| `context_dim` | $c$ | 32-128 | Vipassana出力の次元 |
+| `num_probes` | $K$ | 8-32 | Vitakkaのプローブ数 |
+| `max_steps` | $T$ | 6-20 | Vicaraの最大ステップ数 |
+
+### Training Strategy
+
+| Key | Symbol | Recommended | Description |
+|:---|:---|:---|:---|
+| `sati_threshold` | $\epsilon$ | 1e-4 | 収束判定閾値 |
+| `beta` | $\beta$ | 0.3-0.7 | 状態更新の慣性パラメータ |
+| `guidance_weight` | $\lambda_g$ | 0.1-0.5 | (Stage 1) Guidance Lossの強さ |
+| `recon_weight` | $\lambda_r$ | 0.1-0.3 | Reconstruction Lossの強さ |
+
+-----
+
+## 9. 基本動作の対比 (Core Dynamics)
+
+Satipatthana Frameworkの基本動作は、従来の生成モデルがとる発散的なアプローチとは対照的に、収束を基盤としている。
+
+| 特徴 | 発散モデル (Divergent) | **収束モデル (Convergent)** |
+|:---|:---|:---|
 | **基本動作** | 系列予測、生成、発散 | 状態の純化、不動化、収束 |
 | **時間依存性** | 文脈履歴に依存 | 現在の状態のみに依存 (マルコフ性) |
 | **アテンション** | Self-Attention (要素間) | Recursive Attention (状態-プローブ間) |
-| **推論の性質** | **開放的・無限 (Open/Infinite)**<br>どこまでも続きうる | **閉鎖的・有限 (Closed/Finite)**<br>一点に定まる |
-| **説明可能性** | 限定的 (Attention Mapなど) | **極めて高い (プローブ/セタナログ)** |
+| **推論の性質** | 開放的・無限 | **閉鎖的・有限** |
+| **説明可能性** | 限定的 | **極めて高い (SantanaLog)** |
 | **哲学的基盤** | 連想、生成、拡大 | **禅定、洞察、本質抽出** |
 
 -----
 
-## 8. 応用と学習戦略 (Applications & Training Strategies)
+## 10. 応用と学習戦略 (Applications & Training Strategies)
 
-Samadhi Frameworkは、**学習戦略（Trainer + Objective）**と**デコーダー（Decoder）**の組み合わせにより、異なるタスクに適用可能である。
+教師ありタスクにおいては **Stage 1 Guidance (AuxHead)** を積極的に使用し、Samathaの収束空間をタスク向けに最適化する。
 
-| 応用タスク | Objective | Decoder Role | 目的関数 (Loss) |
-| :--- | :--- | :--- | :--- |
-| **構造発見 / クラスタリング**<br>(Unsupervised) | `UnsupervisedObjective` | **Identity** | Stability + Entropy + Sparsity<br>(内部状態の安定化のみを追求) |
-| **オートエンコーダ事前学習**<br>(Pre-training) | `AutoencoderObjective` | **Reconstruction** | Reconstruction Loss Only<br>(入力の復元誤差最小化、Vicaraスキップ) |
-| **異常検知**<br>(Anomaly Detection) | `AnomalyObjective` | **Reconstruction** | Recon + Stability + Margin<br>(正常データの復元と異常データの排除) |
-| **教師ありタスク**<br>(分類) | `SupervisedClassificationObjective` | **Classifier** | CrossEntropy + Stability<br>(ターゲット予測) |
-| **教師ありタスク**<br>(回帰) | `SupervisedRegressionObjective` | **Regressor** | MSE + Stability<br>(ターゲット予測) |
-| **教師ありタスク**<br>(ロバスト回帰) | `RobustRegressionObjective` | **Regressor** | Huber / L1 + Stability<br>(外れ値に強いターゲット予測) |
-| **意味的類似性学習**<br>(Unsupervised) | `CosineSimilarityObjective` | **Identity** / **Reconstruction** | Cosine Embedding Loss + Stability<br>(入力と再構成の方向性一致) |
-
-*   **Meditation Mode (Unsupervised):** 外界の正解に頼らず、データ内在の構造（Dharma）を見出す。
-*   **Expression Mode (Supervised/Anomaly):** 見出した構造を利用して、外界のタスク（分類、検知）を解く。
+| 応用タスク | Stage 1 Strategy | Stage 2 Role | Stage 3 Decoder |
+|:---|:---|:---|:---|
+| **教師あり分類** | Guidance (CE Loss) | Hallucination Check | Classifier (Softmax) |
+| **教師あり回帰** | Guidance (MSE Loss) | Uncertainty Est. | Regressor (Linear) |
+| **異常検知** | Reconstruction Only | Anomaly Score (最終出力) | Identity |
+| **構造発見** | Stability Only | Boundary Detection | None |
 
 -----
 
-## 9. 大規模言語モデル (LLM) との連携 (Integration with LLMs)
+## 11. 大規模言語モデル (LLM) との連携 (Integration with LLMs)
 
-Samadhiの「収束・安定化」と、LLMの「生成・発散」は補完的である。
+本アーキテクチャは、LLMの「幻覚（Hallucination）」対策として機能する。
 
-*   **LLM (Generator):** 発散的思考、トークン予測、文脈生成を担当。
-*   **Samadhi (Stabilizer):** 収束的思考、状態純化、意図の固定を担当。
-
-主な連携:
-1.  **意図の安定化 (Intent Stabilization):** LLMの出力をSamadhiで純化し、ブレのない一貫した対話を実現。
-2.  **プロンプト強化 (Prompt Refinement):** ユーザー入力を純化し、LLMへの明確な指示ベクトルとする。
-3.  **出力検証 (Output Verification):** 収束度（Stability Score）を用いて、LLMの幻覚（Hallucination）を検知。
+1. **Thinking Phase:** LLMのHidden StatesをSamathaで収束させ、文脈の一貫性を確認
+2. **Introspection Phase:** Vipassanaが「自信満々の嘘（Mismatch）」を検知
+3. **Expression Phase:** スコアが低い場合、安全策（検索トリガー、回答拒否）を講じる
 
 -----
 
-## 10. アーキテクチャの拡張性 (Architectural Extensibility)
+## 12. アーキテクチャの拡張性 (Architectural Extensibility)
 
-`SamadhiBuilder` や `presets` を使用して、コンポーネントを自由に組み合わせることができる。
+`SystemConfig` と各種 `ComponentConfig` を使用して、コンポーネントを自由に組み合わせることができる。
 
-### 10.1. Task-Specific Customization Example
+### 12.1. Task-Specific Customization Example
 
-| タスク | Adapter | Refiner | Decoder | Objective |
-| :--- | :--- | :--- | :--- | :--- |
-| **時系列異常検知** | LSTM | MLP | Reconstruction | AnomalyObjective |
-| **画像分類** | CNN | MLP | Classification | SupervisedObjective |
-| **対話意図推定** | Transformer | Attention | Classification | SupervisedObjective |
-| **ロボット制御** | Sensor Fusion | MLP | Action | RL (PPO) |
+| タスク | Adapter | Augmenter | Vicara | Decoder |
+|:---|:---|:---|:---|:---|
+| **時系列異常検知** | LSTM | Gaussian | Standard | Reconstruction |
+| **画像分類** | CNN | Identity | Standard | Conditional |
+| **対話意図推定** | Transformer | Identity | ProbeSpecific | Conditional |
+| **ロボット制御** | MLP | Gaussian | Weighted | Conditional |
+
+### 12.2. Config Example
+
+```python
+from satipatthana.configs import SystemConfig, SamathaConfig, VipassanaEngineConfig
+from satipatthana.configs import create_adapter_config, create_vicara_config
+
+config = SystemConfig(
+    samatha=SamathaConfig(
+        adapter=create_adapter_config("mlp", input_dim=784, latent_dim=64),
+        augmenter=AugmenterConfig(type=AugmenterType.GAUSSIAN, max_noise_std=0.3),
+        vitakka=VitakkaConfig(num_probes=16),
+        vicara=create_vicara_config("standard", latent_dim=64),
+        sati=SatiConfig(type=SatiType.THRESHOLD, threshold=1e-4),
+    ),
+    vipassana=VipassanaEngineConfig(
+        vipassana=StandardVipassanaConfig(context_dim=32),
+    ),
+    use_label_guidance=True,
+)
+```
