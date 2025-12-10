@@ -15,7 +15,7 @@ from transformers import TrainingArguments
 
 from samadhi.core.system import SamadhiSystem, TrainingStage
 from samadhi.core.engines import SamathaEngine, VipassanaEngine
-from samadhi.train.v4_trainer import SamadhiV4Trainer, Stage2NoiseStrategy
+from samadhi.train.trainer import SamadhiV4Trainer, Stage2NoiseStrategy
 from samadhi.configs.system import SystemConfig, SamathaConfig, VipassanaEngineConfig
 from samadhi.configs.adapters import MlpAdapterConfig
 from samadhi.configs.vitakka import StandardVitakkaConfig
