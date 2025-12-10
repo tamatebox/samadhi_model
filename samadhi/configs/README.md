@@ -7,24 +7,25 @@ This directory contains the new Type-Safe Dataclass-based configuration system f
 The goal of this refactoring is to improve readability, prevent runtime errors due to typos or type mismatches, and enhance maintainability by introducing a structured, type-safe approach to configuration management.
 
 ### Key Principles
--   **Type Safety**: All configuration parameters are defined within Python dataclasses with explicit type hints.
--   **Modularity**: Configurations are split into logical units (e.g., adapters, vicara, vitakka, decoders, objectives).
--   **Validation**: Each configuration dataclass can implement a `validate()` method for custom validation and type conversions (e.g., `list` to `tuple`).
--   **Factory Pattern**: Factory functions are used to instantiate the correct configuration class based on a `type` field (e.g., `AdapterType.MLP`, `VicaraType.STANDARD`).
--   **Single Source of Truth**: `SamadhiConfig` acts as the root configuration, encapsulating all component-specific configurations.
--   **Backward Compatibility**: During migration, components can still accept dictionary-based configurations, which are then automatically converted to the corresponding dataclass using the factory functions.
+
+- **Type Safety**: All configuration parameters are defined within Python dataclasses with explicit type hints.
+- **Modularity**: Configurations are split into logical units (e.g., adapters, vicara, vitakka, decoders, objectives).
+- **Validation**: Each configuration dataclass can implement a `validate()` method for custom validation and type conversions (e.g., `list` to `tuple`).
+- **Factory Pattern**: Factory functions are used to instantiate the correct configuration class based on a `type` field (e.g., `AdapterType.MLP`, `VicaraType.STANDARD`).
+- **Single Source of Truth**: `SamadhiConfig` acts as the root configuration, encapsulating all component-specific configurations.
+- **Backward Compatibility**: During migration, components can still accept dictionary-based configurations, which are then automatically converted to the corresponding dataclass using the factory functions.
 
 ## Directory Structure
 
--   `base.py`: Contains `BaseConfig`, the abstract base class for all configurations, providing `from_dict` and `validate` methods.
--   `enums.py`: Defines `Enum` classes for component types (e.g., `AdapterType`, `VicaraType`, `DecoderType`) to prevent string-based typos.
--   `adapters.py`: Dataclasses for Adapter component configurations (e.g., `MlpAdapterConfig`, `CnnAdapterConfig`).
--   `vitakka.py`: Dataclasses for Vitakka component configurations (e.g., `StandardVitakkaConfig`).
--   `vicara.py`: Dataclasses for Vicara component configurations (e.g., `StandardVicaraConfig`, `ProbeVicaraConfig`).
--   `decoders.py`: Dataclasses for Decoder component configurations (e.g., `ReconstructionDecoderConfig`, `CnnDecoderConfig`).
--   `objectives.py`: Dataclasses for Objective configurations (e.g., `ObjectiveConfig`).
--   `factory.py`: Contains factory functions (e.g., `create_adapter_config`) responsible for dynamically creating the correct configuration dataclass instance from a dictionary based on its `type` field.
--   `main.py`: Contains `SamadhiConfig`, the top-level configuration dataclass that holds instances of all other component configurations.
+- `base.py`: Contains `BaseConfig`, the abstract base class for all configurations, providing `from_dict` and `validate` methods.
+- `enums.py`: Defines `Enum` classes for component types (e.g., `AdapterType`, `VicaraType`, `DecoderType`) to prevent string-based typos.
+- `adapters.py`: Dataclasses for Adapter component configurations (e.g., `MlpAdapterConfig`, `CnnAdapterConfig`).
+- `vitakka.py`: Dataclasses for Vitakka component configurations (e.g., `StandardVitakkaConfig`).
+- `vicara.py`: Dataclasses for Vicara component configurations (e.g., `StandardVicaraConfig`, `ProbeVicaraConfig`).
+- `decoders.py`: Dataclasses for Decoder component configurations (e.g., `ReconstructionDecoderConfig`, `CnnDecoderConfig`).
+- `objectives.py`: Dataclasses for Objective configurations (e.g., `ObjectiveConfig`).
+- `factory.py`: Contains factory functions (e.g., `create_adapter_config`) responsible for dynamically creating the correct configuration dataclass instance from a dictionary based on its `type` field.
+- `main.py`: Contains `SamadhiConfig`, the top-level configuration dataclass that holds instances of all other component configurations.
 
 ## Usage Example
 
@@ -68,7 +69,7 @@ assert my_config == my_config_direct
 Access parameters using dot notation, benefiting from static type checking:
 
 ```python
-# In SamadhiEngine or other components:
+# In SamadhiSystem or other components:
 class MyComponent:
     def __init__(self, config: SamadhiConfig):
         self.config = config
@@ -88,10 +89,11 @@ class MyComponent:
 ### 3. Extending Configurations
 
 To add a new component type or parameter:
-1.  Create a new `Enum` member in `enums.py` if it's a new component type (e.g., for a new adapter type).
-2.  Define a new `@dataclass` in the relevant component file (e.g., `adapters.py`, `objectives.py`) inheriting from its `Base*Config`.
-3.  Implement any custom `validate()` logic in the new dataclass.
-4.  Update the corresponding `create_*_config` factory function in `factory.py` to handle the new type.
-5.  If it's a top-level parameter or a new nested component (like `objective`), update `SamadhiConfig` in `main.py`.
+
+1. Create a new `Enum` member in `enums.py` if it's a new component type (e.g., for a new adapter type).
+2. Define a new `@dataclass` in the relevant component file (e.g., `adapters.py`, `objectives.py`) inheriting from its `Base*Config`.
+3. Implement any custom `validate()` logic in the new dataclass.
+4. Update the corresponding `create_*_config` factory function in `factory.py` to handle the new type.
+5. If it's a top-level parameter or a new nested component (like `objective`), update `SamadhiConfig` in `main.py`.
 
 This structured approach ensures consistency, reduces errors, and makes the configuration system more robust and easier to evolve.

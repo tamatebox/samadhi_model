@@ -16,7 +16,6 @@ from samadhi.configs.decoders import (
     LstmDecoderConfig,
     SimpleSequenceDecoderConfig,
 )
-from samadhi.configs.objectives import ObjectiveConfig
 
 
 def _is_valid_type(type_val: Any, enum_cls: Any) -> bool:
@@ -129,8 +128,3 @@ def create_decoder_config(data: Dict[str, Any]) -> BaseDecoderConfig:
         if "decoder_hidden_dim" not in clean_data and "adapter_hidden_dim" in clean_data:
             clean_data["decoder_hidden_dim"] = clean_data["adapter_hidden_dim"]
         return ReconstructionDecoderConfig.from_dict(clean_data)
-
-
-def create_objective_config(data: Dict[str, Any]) -> ObjectiveConfig:
-    """Creates an ObjectiveConfig."""
-    return ObjectiveConfig.from_dict(data)

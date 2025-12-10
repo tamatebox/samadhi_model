@@ -259,8 +259,7 @@ After creating your component and its corresponding configuration, follow these 
 
 1. **Update `samadhi/configs/enums.py`**: Add a new member to the relevant `Enum` (e.g., `AdapterType`) for your new component type.
 2. **Update `samadhi/configs/factory.py`**: Modify the appropriate `create_*_config` function (e.g., `create_adapter_config`) to include logic for instantiating your new configuration dataclass based on its `type`.
-3. **Update `samadhi/core/builder.py`**: If your component is directly settable via the `SamadhiBuilder` (like Adapter, Vitakka, Vicara, Decoder), update the relevant `set_*` method to instantiate your component using its new configuration.
-4. **Preset Creation (Optional)**: Create a new factory function in `samadhi/presets/` that instantiates your new component as part of a predefined model configuration.
+3. **Use in SamadhiSystem**: Instantiate your component and pass it to `SamadhiSystem` or the appropriate Engine (`SamathaEngine`, `VipassanaEngine`).
 
 ## Testing New Components
 
