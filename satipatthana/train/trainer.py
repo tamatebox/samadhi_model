@@ -234,14 +234,15 @@ class SatipatthanaTrainer(Trainer):
 
         s_star = result["s_star"]
         santana = result["santana"]
+        stability_pair = result["stability_pair"]
         x_recon = result.get("x_recon")
         aux_output = result.get("aux_output")
 
         loss_components = {}
-        total_loss = torch.tensor(0.0, device=x.device)
+        total_loss = torch.tensor(0.0, device=x.device, requires_grad=True)
 
-        # Stability loss
-        stability_loss, stability_components = self.stability_loss.compute_loss(santana)
+        # Stability loss (now differentiable via stability_pair)
+        stability_loss, stability_components = self.stability_loss.compute_loss(stability_pair, santana)
         loss_components.update(stability_components)
         total_loss = total_loss + self.stability_weight * stability_loss
 
@@ -319,7 +320,9 @@ class SatipatthanaTrainer(Trainer):
             x_mismatch = x_splits[2]
             # First get normal S* and SantanaLog
             with torch.no_grad():
-                s_star_normal, santana_normal, _ = model.samatha(x_mismatch)
+                samatha_output = model.samatha(x_mismatch)
+                s_star_normal = samatha_output.s_star
+                santana_normal = samatha_output.santana
 
             # Shuffle S* within batch to create mismatch
             perm = torch.randperm(sizes[2], device=device)
@@ -402,7 +405,17 @@ class SatipatthanaTrainer(Trainer):
             num_epochs: Number of epochs for this stage
             **kwargs: Additional arguments passed to train()
         """
+        # For Stage 2 (Vipassana Training), we need to initialize the lazy networks
+        # before setting the stage, otherwise the parameters won't exist yet
+        if stage == TrainingStage.VIPASSANA_TRAINING:
+            self._initialize_vipassana_networks()
+
         self.set_stage(stage)
+
+        # Reset optimizer and scheduler to use new trainable parameters
+        # This is critical when switching stages as different parameters are trainable
+        self.optimizer = None
+        self.lr_scheduler = None
 
         # Update training arguments for this stage
         original_epochs = self.args.num_train_epochs
@@ -417,6 +430,44 @@ class SatipatthanaTrainer(Trainer):
             self.args.num_train_epochs = original_epochs
 
         return result
+
+    def _initialize_vipassana_networks(self):
+        """
+        Initialize Vipassana's lazy networks by running a dummy forward pass.
+
+        StandardVipassana uses lazy initialization - the encoder and trust_head
+        networks are only created on the first forward pass when the state
+        dimension is known. This method ensures they exist before set_stage()
+        is called, so the parameters can be properly unfrozen.
+        """
+        # Get a sample batch from the dataset to determine dimensions
+        sample = self.train_dataset[0]
+        if isinstance(sample, dict):
+            x = sample.get("x")
+            if x is None:
+                x = sample.get("input_values")
+            if x is None:
+                x = sample.get("pixel_values")
+        else:
+            x = sample[0]
+
+        if x is None:
+            logger.warning("Could not get sample input for Vipassana initialization")
+            return
+
+        # Add batch dimension if needed
+        if x.dim() == len(x.shape):
+            x = x.unsqueeze(0)
+
+        x = x.to(self.args.device)
+
+        # Run a forward pass to initialize Vipassana networks
+        with torch.no_grad():
+            try:
+                self.model.forward_stage2(x, noise_level=0.0, drunk_mode=False)
+                logger.info("Vipassana networks initialized via forward pass")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Vipassana networks: {e}")
 
     def run_curriculum(
         self, stage0_epochs: int = 0, stage1_epochs: int = 10, stage2_epochs: int = 5, stage3_epochs: int = 5, **kwargs

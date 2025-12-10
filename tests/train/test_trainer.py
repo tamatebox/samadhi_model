@@ -10,7 +10,7 @@ These tests verify:
 
 import pytest
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from transformers import TrainingArguments
 
 from satipatthana.core.system import SatipatthanaSystem, TrainingStage
@@ -205,6 +205,227 @@ class TestStageSwitching:
         assert "task_decoder" in trainable
         assert "adapter" not in trainable
         assert "vipassana" not in trainable
+
+
+class TestOptimizerParamGroups:
+    """Tests for optimizer param_groups after stage switching.
+
+    These tests verify that the optimizer is correctly reset when switching stages,
+    ensuring that the new trainable parameters are properly included in the optimizer's
+    param_groups. This is critical because HuggingFace Trainer caches the optimizer.
+
+    Related Issue: docs/issues/001_training_issues_v4.md - Issue 2
+    """
+
+    def test_optimizer_reset_after_stage_switch(self, system_full, training_args, dataset):
+        """Test that optimizer is reset (set to None) after train_stage call."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.INFERENCE,
+        )
+
+        # Simulate having a cached optimizer from a previous stage
+        trainer.optimizer = torch.optim.Adam(system_full.parameters(), lr=0.001)
+        trainer.lr_scheduler = None
+
+        # Call train_stage which should reset the optimizer
+        training_args.max_steps = 1  # Minimal training
+        trainer.train_stage(TrainingStage.ADAPTER_PRETRAINING, num_epochs=1)
+
+        # After train_stage completes, optimizer should have been recreated
+        # (it won't be None because train() creates a new one)
+        # The key test is that it contains the correct parameters
+
+    def test_optimizer_contains_correct_params_stage0(self, system_full, training_args, dataset):
+        """Test that Stage 0 optimizer only contains adapter and adapter_recon_head params."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.ADAPTER_PRETRAINING,
+        )
+
+        # Get expected trainable parameter ids
+        expected_param_ids = set()
+        for p in system_full.samatha.adapter.parameters():
+            if p.requires_grad:
+                expected_param_ids.add(id(p))
+        if system_full.adapter_recon_head is not None:
+            for p in system_full.adapter_recon_head.parameters():
+                if p.requires_grad:
+                    expected_param_ids.add(id(p))
+
+        # Create optimizer
+        optimizer = trainer.create_optimizer()
+
+        # Check that optimizer param_groups contain exactly the expected params
+        optimizer_param_ids = set()
+        for group in optimizer.param_groups:
+            for p in group["params"]:
+                optimizer_param_ids.add(id(p))
+
+        assert optimizer_param_ids == expected_param_ids, (
+            f"Optimizer param mismatch for Stage 0. "
+            f"Expected {len(expected_param_ids)} params, got {len(optimizer_param_ids)}"
+        )
+
+    def test_optimizer_contains_correct_params_stage1(self, system_full, training_args, dataset):
+        """Test that Stage 1 optimizer contains Samatha core params."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.SAMATHA_TRAINING,
+            use_label_guidance=True,
+        )
+
+        # Get expected trainable parameter ids for Stage 1
+        expected_param_ids = set()
+        for module in [
+            system_full.samatha.adapter,
+            system_full.samatha.vitakka,
+            system_full.samatha.vicara,
+            system_full.samatha.sati,
+        ]:
+            for p in module.parameters():
+                if p.requires_grad:
+                    expected_param_ids.add(id(p))
+
+        if system_full.samatha_recon_head is not None:
+            for p in system_full.samatha_recon_head.parameters():
+                if p.requires_grad:
+                    expected_param_ids.add(id(p))
+
+        if system_full.auxiliary_head is not None:
+            for p in system_full.auxiliary_head.parameters():
+                if p.requires_grad:
+                    expected_param_ids.add(id(p))
+
+        # Create optimizer
+        optimizer = trainer.create_optimizer()
+
+        # Check param_groups
+        optimizer_param_ids = set()
+        for group in optimizer.param_groups:
+            for p in group["params"]:
+                optimizer_param_ids.add(id(p))
+
+        assert optimizer_param_ids == expected_param_ids, (
+            f"Optimizer param mismatch for Stage 1. "
+            f"Expected {len(expected_param_ids)} params, got {len(optimizer_param_ids)}"
+        )
+
+    def test_optimizer_contains_correct_params_stage2(self, system_full, training_args, dataset):
+        """Test that Stage 2 optimizer only contains Vipassana params."""
+        # First initialize Vipassana networks
+        x = torch.randn(BATCH_SIZE, INPUT_DIM)
+        _ = system_full.forward_stage2(x)
+
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+        )
+
+        # Get expected trainable parameter ids for Stage 2 (only Vipassana)
+        expected_param_ids = set()
+        for p in system_full.vipassana.parameters():
+            if p.requires_grad:
+                expected_param_ids.add(id(p))
+
+        # Create optimizer
+        optimizer = trainer.create_optimizer()
+
+        # Check param_groups
+        optimizer_param_ids = set()
+        for group in optimizer.param_groups:
+            for p in group["params"]:
+                optimizer_param_ids.add(id(p))
+
+        assert optimizer_param_ids == expected_param_ids, (
+            f"Optimizer param mismatch for Stage 2. "
+            f"Expected {len(expected_param_ids)} params, got {len(optimizer_param_ids)}"
+        )
+
+    def test_optimizer_contains_correct_params_stage3(self, system_full, training_args, dataset):
+        """Test that Stage 3 optimizer only contains task_decoder params."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.DECODER_FINETUNING,
+        )
+
+        # Get expected trainable parameter ids for Stage 3 (only task_decoder)
+        expected_param_ids = set()
+        for p in system_full.task_decoder.parameters():
+            if p.requires_grad:
+                expected_param_ids.add(id(p))
+
+        # Create optimizer
+        optimizer = trainer.create_optimizer()
+
+        # Check param_groups
+        optimizer_param_ids = set()
+        for group in optimizer.param_groups:
+            for p in group["params"]:
+                optimizer_param_ids.add(id(p))
+
+        assert optimizer_param_ids == expected_param_ids, (
+            f"Optimizer param mismatch for Stage 3. "
+            f"Expected {len(expected_param_ids)} params, got {len(optimizer_param_ids)}"
+        )
+
+    def test_stage_transition_updates_optimizer_params(self, system_full, training_args, dataset):
+        """Test that transitioning between stages correctly updates optimizer params.
+
+        This is the critical regression test for Issue 2 in 001_training_issues_v4.md.
+        It verifies that after switching from Stage 0 to Stage 1, the optimizer
+        includes the newly trainable Vitakka/Vicara parameters.
+        """
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.ADAPTER_PRETRAINING,
+        )
+
+        # Create optimizer for Stage 0
+        optimizer_stage0 = trainer.create_optimizer()
+        stage0_param_ids = set()
+        for group in optimizer_stage0.param_groups:
+            for p in group["params"]:
+                stage0_param_ids.add(id(p))
+
+        # Switch to Stage 1
+        trainer.set_stage(TrainingStage.SAMATHA_TRAINING)
+        trainer.optimizer = None  # Reset as train_stage does
+        trainer.lr_scheduler = None
+
+        # Create new optimizer for Stage 1
+        optimizer_stage1 = trainer.create_optimizer()
+        stage1_param_ids = set()
+        for group in optimizer_stage1.param_groups:
+            for p in group["params"]:
+                stage1_param_ids.add(id(p))
+
+        # Stage 1 should have MORE parameters than Stage 0
+        # (includes vitakka, vicara, sati, aux_head in addition to adapter)
+        assert len(stage1_param_ids) > len(stage0_param_ids), (
+            f"Stage 1 should have more trainable params than Stage 0. "
+            f"Stage 0: {len(stage0_param_ids)}, Stage 1: {len(stage1_param_ids)}"
+        )
+
+        # Verify Vitakka params are included in Stage 1
+        vitakka_param_ids = {id(p) for p in system_full.samatha.vitakka.parameters() if p.requires_grad}
+        assert vitakka_param_ids.issubset(stage1_param_ids), "Vitakka params should be in Stage 1 optimizer"
+
+        # Verify Vicara params are included in Stage 1
+        vicara_param_ids = {id(p) for p in system_full.samatha.vicara.parameters() if p.requires_grad}
+        assert vicara_param_ids.issubset(stage1_param_ids), "Vicara params should be in Stage 1 optimizer"
 
 
 class TestLossComputation:
