@@ -174,23 +174,31 @@ class TestStandardVipassana:
         assert not torch.allclose(v_ctx1, v_ctx2)
 
     def test_energy_affects_context(self):
-        """Test that trajectory energy affects the context vector."""
+        """Test that trajectory energy (computed from state changes) affects the context vector."""
         vipassana = StandardVipassana()
 
-        state = torch.randn(4, 32)
-        s_star = torch.randn(4, 32)
+        batch_size = 4
+        dim = 32
+        s_star = torch.randn(batch_size, dim)
 
-        # High energy trajectory
+        # High energy trajectory: states oscillate wildly
         santana_high = SantanaLog()
-        santana_high.add(state, energy=10.0)
+        for i in range(5):
+            # Alternate between very different states
+            state = torch.randn(batch_size, dim) * (10.0 if i % 2 == 0 else -10.0)
+            santana_high.add(state)
         v_ctx_high, _ = vipassana(s_star, santana_high)
 
-        # Low energy trajectory
+        # Low energy trajectory: states are very similar (smooth convergence)
         santana_low = SantanaLog()
-        santana_low.add(state, energy=0.001)
+        base_state = torch.randn(batch_size, dim)
+        for i in range(5):
+            # Add tiny perturbations
+            state = base_state + torch.randn(batch_size, dim) * 0.001
+            santana_low.add(state)
         v_ctx_low, _ = vipassana(s_star, santana_low)
 
-        # Context vectors should be different due to different energy
+        # Context vectors should be different due to different trajectory energy
         assert not torch.allclose(v_ctx_high, v_ctx_low)
 
     def test_is_nn_module(self):

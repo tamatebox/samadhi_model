@@ -210,7 +210,8 @@ class SamathaEngine(nn.Module):
             s_prev_grad = s_t
 
             # Drunk mode: random skip updates
-            if self._drunk_mode and torch.rand(1).item() < 0.2:
+            skip_prob = getattr(self.config, "drunk_skip_prob", 0.3)
+            if self._drunk_mode and torch.rand(1).item() < skip_prob:
                 # Skip this step randomly
                 energy = 0.0
             else:
@@ -219,7 +220,8 @@ class SamathaEngine(nn.Module):
 
                 # Drunk mode: add perturbation after update
                 if self._drunk_mode:
-                    s_t = s_t + torch.randn_like(s_t) * 0.05
+                    perturbation_std = getattr(self.config, "drunk_perturbation_std", 0.2)
+                    s_t = s_t + torch.randn_like(s_t) * perturbation_std
 
                 # Compute energy (state change magnitude) for logging only
                 energy = torch.norm(s_t - s_prev_for_energy, dim=1).mean().item()

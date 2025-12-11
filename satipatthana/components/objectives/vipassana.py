@@ -188,6 +188,67 @@ class GuidanceLoss:
             }
 
 
+class ProbeDiversityLoss:
+    """
+    Probe Diversity Loss for Stage 1 Samatha training.
+
+    Encourages probe vectors to be spread out in latent space by penalizing
+    high cosine similarity between probe pairs. This prevents mode collapse
+    where all samples converge to a single probe.
+    """
+
+    def __init__(self, device: Optional[str] = None):
+        self.device = torch.device(device) if device else self._get_default_device()
+
+    def _get_default_device(self) -> torch.device:
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            return torch.device("mps")
+        else:
+            return torch.device("cpu")
+
+    def compute_loss(
+        self,
+        probes: torch.Tensor,
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        """
+        Compute diversity loss to encourage probe spread.
+
+        Args:
+            probes: Probe vectors (N_PROBES, dim)
+
+        Returns:
+            loss: Mean off-diagonal cosine similarity (lower = more diverse)
+            loss_components: Dictionary with loss breakdown
+        """
+        n_probes = probes.size(0)
+
+        # Normalize probes
+        probes_norm = probes / (probes.norm(dim=1, keepdim=True) + 1e-8)
+
+        # Compute pairwise cosine similarity matrix
+        similarity_matrix = torch.mm(probes_norm, probes_norm.t())
+
+        # Mask out diagonal (self-similarity = 1.0)
+        mask = ~torch.eye(n_probes, dtype=torch.bool, device=probes.device)
+        off_diagonal = similarity_matrix[mask]
+
+        # Loss: mean similarity (want to minimize)
+        diversity_loss = off_diagonal.mean()
+
+        # Additional stats
+        max_sim = off_diagonal.max().item()
+        min_sim = off_diagonal.min().item()
+
+        return diversity_loss, {
+            "diversity_loss": diversity_loss.item(),
+            "probe_sim_mean": diversity_loss.item(),
+            "probe_sim_max": max_sim,
+            "probe_sim_min": min_sim,
+        }
+
+
 class StabilityLoss:
     """
     Stability Loss for Stage 1 Samatha training.
@@ -244,4 +305,4 @@ class StabilityLoss:
         }
 
 
-__all__ = ["VipassanaObjective", "GuidanceLoss", "StabilityLoss"]
+__all__ = ["VipassanaObjective", "GuidanceLoss", "ProbeDiversityLoss", "StabilityLoss"]

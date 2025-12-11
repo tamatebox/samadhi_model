@@ -29,6 +29,10 @@ class SamathaConfig(BaseConfig):
     dim: int = 64
     max_steps: int = 10  # Maximum Vicara loop iterations
 
+    # Drunk mode parameters (for Stage 2 negative sampling)
+    drunk_skip_prob: float = 0.3  # Probability to skip a refinement step
+    drunk_perturbation_std: float = 0.2  # Std of random perturbation added to state
+
     # Component configs
     adapter: BaseAdapterConfig = field(default_factory=lambda: MlpAdapterConfig(input_dim=10))
     augmenter: BaseAugmenterConfig = field(default_factory=IdentityAugmenterConfig)

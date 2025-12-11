@@ -22,6 +22,7 @@ from satipatthana.core.santana import SantanaLog
 from satipatthana.components.objectives.vipassana import (
     VipassanaObjective,
     GuidanceLoss,
+    ProbeDiversityLoss,
     StabilityLoss,
 )
 from satipatthana.utils.logger import get_logger
@@ -85,6 +86,8 @@ class SatipatthanaTrainer(Trainer):
         stability_weight: float = 0.1,
         guidance_weight: float = 1.0,
         recon_weight: float = 1.0,
+        diversity_weight: float = 0.1,
+        label_key: str = "y",
     ):
         super().__init__(
             model=model,
@@ -111,11 +114,14 @@ class SatipatthanaTrainer(Trainer):
         self.stability_weight = stability_weight
         self.guidance_weight = guidance_weight
         self.recon_weight = recon_weight
+        self.diversity_weight = diversity_weight
+        self.label_key = label_key
 
         # Initialize objectives
         self.vipassana_objective = VipassanaObjective()
         self.guidance_loss = GuidanceLoss(task_type=task_type)
         self.stability_loss = StabilityLoss()
+        self.diversity_loss = ProbeDiversityLoss()
         self.recon_loss_fn = nn.MSELoss()
         self.task_loss_fn = nn.CrossEntropyLoss() if task_type == "classification" else nn.MSELoss()
         self.task_type = task_type
@@ -158,7 +164,7 @@ class SatipatthanaTrainer(Trainer):
             if x is None:
                 x = inputs.get("pixel_values")
 
-            y = inputs.get("y")
+            y = inputs.get(self.label_key)
             if y is None:
                 y = inputs.get("labels")
         else:
@@ -258,6 +264,13 @@ class SatipatthanaTrainer(Trainer):
             loss_components.update(guidance_components)
             total_loss = total_loss + self.guidance_weight * guidance_loss
 
+        # Probe diversity loss (prevent mode collapse)
+        if self.diversity_weight > 0:
+            probes = model.samatha.vitakka.probes
+            diversity_loss, diversity_components = self.diversity_loss.compute_loss(probes)
+            loss_components.update(diversity_components)
+            total_loss = total_loss + self.diversity_weight * diversity_loss
+
         outputs = {
             "s_star": s_star,
             "santana": santana,
@@ -273,40 +286,55 @@ class SatipatthanaTrainer(Trainer):
         """
         Stage 2: Vipassana Training.
 
-        Uses 3 noise strategies to generate contrastive pairs:
-        1. Augmented path (Environmental Ambiguity) - target: 1.0 - severity
-        2. Drunk path (Internal Dysfunction) - target: 0.0
-        3. Mismatch path (Logical Inconsistency) - target: 0.0
+        Uses 4 noise strategies to generate contrastive pairs (per training_strategy.md):
+        1. Clean path (No noise) - target: 1.0 (30% recommended)
+        2. Augmented path (Environmental Ambiguity) - target: 1.0 - severity (40% recommended)
+        3. Drunk path (Internal Dysfunction) - target: 0.0 (15% recommended)
+        4. Mismatch path (Logical Inconsistency) - target: 0.0 (15% recommended)
         """
         batch_size = x.size(0)
         device = x.device
 
-        # Split batch into 3 parts for different noise strategies
-        split_size = batch_size // 3
-        remainder = batch_size % 3
+        # Split batch into 4 parts for different noise strategies
+        # Approximate ratios: Clean=30%, Augmented=40%, Drunk=15%, Mismatch=15%
+        # For simplicity, use equal splits (25% each)
+        split_size = batch_size // 4
+        remainder = batch_size % 4
 
         # Adjust split sizes
-        sizes = [split_size + (1 if i < remainder else 0) for i in range(3)]
+        sizes = [split_size + (1 if i < remainder else 0) for i in range(4)]
         x_splits = torch.split(x, sizes)
 
         all_trust_scores = []
         all_targets = []
 
-        # 1. Augmented Path (Environmental Ambiguity)
+        # 1. Clean Path (No noise - baseline for high trust)
         if sizes[0] > 0:
-            x_aug = x_splits[0]
+            x_clean = x_splits[0]
+            result_clean = model.forward_stage2(x_clean, noise_level=0.0, drunk_mode=False)
+            trust_clean = result_clean["trust_score"]
+            # Target: 1.0 (clean input should produce high trust)
+            target_clean = torch.ones_like(trust_clean)
+
+            all_trust_scores.append(trust_clean)
+            all_targets.append(target_clean)
+
+        # 2. Augmented Path (Environmental Ambiguity)
+        if sizes[1] > 0:
+            x_aug = x_splits[1]
             result_aug = model.forward_stage2(x_aug, noise_level=self.noise_level, drunk_mode=False)
             trust_aug = result_aug["trust_score"]
             # Target: 1.0 - severity (higher noise = lower trust target)
-            severity_aug = result_aug.get("severity", torch.zeros(sizes[0], device=device))
-            target_aug = 1.0 - severity_aug.unsqueeze(-1) * self.noise_level
+            # severity is already noise_level * max_noise_std, so don't multiply again
+            severity_aug = result_aug.get("severity", torch.zeros(sizes[1], device=device))
+            target_aug = 1.0 - severity_aug.unsqueeze(-1)
 
             all_trust_scores.append(trust_aug)
             all_targets.append(target_aug)
 
-        # 2. Drunk Path (Internal Dysfunction)
-        if sizes[1] > 0:
-            x_drunk = x_splits[1]
+        # 3. Drunk Path (Internal Dysfunction)
+        if sizes[2] > 0:
+            x_drunk = x_splits[2]
             result_drunk = model.forward_stage2(x_drunk, noise_level=0.0, drunk_mode=True)
             trust_drunk = result_drunk["trust_score"]
             # Target: 0.0 (drunk mode should produce low trust)
@@ -315,9 +343,9 @@ class SatipatthanaTrainer(Trainer):
             all_trust_scores.append(trust_drunk)
             all_targets.append(target_drunk)
 
-        # 3. Mismatch Path (Logical Inconsistency)
-        if sizes[2] > 0:
-            x_mismatch = x_splits[2]
+        # 4. Mismatch Path (Logical Inconsistency)
+        if sizes[3] > 0:
+            x_mismatch = x_splits[3]
             # First get normal S* and SantanaLog
             with torch.no_grad():
                 samatha_output = model.samatha(x_mismatch)
@@ -325,7 +353,7 @@ class SatipatthanaTrainer(Trainer):
                 santana_normal = samatha_output.santana
 
             # Shuffle S* within batch to create mismatch
-            perm = torch.randperm(sizes[2], device=device)
+            perm = torch.randperm(sizes[3], device=device)
             s_star_shuffled = s_star_normal[perm]
 
             # Pass mismatched (S*, SantanaLog) to Vipassana
