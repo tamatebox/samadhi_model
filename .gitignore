@@ -9,8 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Data
-data/
+# Data (root level only, not satipatthana/data/)
+/data/
 
 # IDE
 .idea/

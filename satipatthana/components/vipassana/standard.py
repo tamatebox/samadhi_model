@@ -61,7 +61,8 @@ class StandardVipassana(BaseVipassana):
         # - entropy: ambiguity across Probes
         # - s0_min_dist: distance from s0 to nearest Probe (initial OOD degree)
         # - drift_magnitude: ||S* - s0|| (convergence drift)
-        trust_feature_dim = 6  # velocity + avg_energy + min_dist + entropy + s0_min_dist + drift
+        # - recon_error: reconstruction error (optional, for OOD detection)
+        trust_feature_dim = 7  # velocity + avg_energy + min_dist + entropy + s0_min_dist + drift + recon_error
         self._trust_head = nn.Sequential(
             nn.Linear(trust_feature_dim, self.hidden_dim // 2),
             nn.ReLU(),
@@ -170,6 +171,7 @@ class StandardVipassana(BaseVipassana):
         s_star: torch.Tensor,
         santana: SantanaLog,
         probes: Optional[torch.Tensor] = None,
+        recon_error: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Analyze the thinking process and produce context vector and trust score.
@@ -178,6 +180,9 @@ class StandardVipassana(BaseVipassana):
             s_star: Converged state tensor (Batch, Dim)
             santana: SantanaLog containing the thinking trajectory
             probes: Probe vectors from Vitakka (N_probes, Dim), optional
+            recon_error: Per-sample reconstruction error (Batch, 1), optional
+                        High recon_error indicates OOD input (input doesn't match
+                        what the model learned to reconstruct)
 
         Returns:
             v_ctx: Context vector (Batch, context_dim) - embedding of "doubt"
@@ -232,7 +237,13 @@ class StandardVipassana(BaseVipassana):
         # - Process quality: velocity, avg_energy (how smoothly did it converge?)
         # - Semantic validity: min_dist, entropy (is the result in known territory?)
         # - Grounding: s0_min_dist, drift (was input OOD before convergence?)
+        # - Reality check: recon_error (does S* reconstruct the input faithfully?)
         # Use log1p to normalize scale while preserving per-sample differences
+
+        # Handle optional recon_error (default to 0 if not provided)
+        if recon_error is None:
+            recon_error = torch.zeros(batch_size, 1, device=device, dtype=dtype)
+
         trust_features = torch.cat(
             [
                 torch.log1p(velocity),
@@ -241,9 +252,10 @@ class StandardVipassana(BaseVipassana):
                 entropy,  # Already normalized (0 to log(K))
                 torch.log1p(s0_min_dist),  # Key for OOD detection
                 torch.log1p(drift_magnitude),  # Large drift = suspicious
+                torch.log1p(recon_error),  # Large error = OOD / hallucination
             ],
             dim=1,
-        )  # (Batch, 6)
+        )  # (Batch, 7)
         trust_score = self._trust_head(trust_features)  # (Batch, 1)
 
         return v_ctx, trust_score

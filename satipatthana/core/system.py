@@ -185,7 +185,14 @@ class SatipatthanaSystem(nn.Module):
         if run_vipassana:
             # Pass Vitakka probes for semantic feature computation
             probes = self.samatha.vitakka.probes
-            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
+
+            # Compute reconstruction error for Trust Score (if recon head available)
+            recon_error = None
+            if self.samatha_recon_head is not None:
+                x_recon = self.samatha_recon_head(s_star)
+                recon_error = ((x_recon - x) ** 2).mean(dim=tuple(range(1, x.dim()))).unsqueeze(1)
+
+            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes, recon_error=recon_error)
         else:
             # Return dummy context and full trust
             context_dim = self.config.vipassana.vipassana.context_dim
@@ -319,8 +326,17 @@ class SatipatthanaSystem(nn.Module):
         # Get probes for semantic feature computation
         probes = self.samatha.vitakka.probes
 
+        # Compute reconstruction error (Reality Check)
+        # High recon_error indicates input doesn't match learned patterns (OOD)
+        recon_error = None
+        if self.samatha_recon_head is not None:
+            with torch.no_grad():
+                x_recon = self.samatha_recon_head(s_star_detached)
+                # Per-sample MSE: mean over feature dimensions
+                recon_error = ((x_recon - x) ** 2).mean(dim=tuple(range(1, x.dim()))).unsqueeze(1)  # (Batch, 1)
+
         # Run Vipassana (trainable)
-        v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
+        v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes, recon_error=recon_error)
 
         return {
             "s_star": s_star,
@@ -348,10 +364,17 @@ class SatipatthanaSystem(nn.Module):
             s_star = samatha_output.s_star
             santana = samatha_output.santana
 
+        # Compute reconstruction error (Reality Check)
+        recon_error = None
+        if self.samatha_recon_head is not None:
+            with torch.no_grad():
+                x_recon = self.samatha_recon_head(s_star)
+                recon_error = ((x_recon - x) ** 2).mean(dim=tuple(range(1, x.dim()))).unsqueeze(1)
+
         # Run Vipassana (frozen)
         with torch.no_grad():
             probes = self.samatha.vitakka.probes
-            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
+            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes, recon_error=recon_error)
 
         # Run TaskDecoder (trainable)
         s_and_ctx = torch.cat([s_star, v_ctx], dim=1)

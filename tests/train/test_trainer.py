@@ -35,6 +35,7 @@ from satipatthana.components.vipassana.standard import StandardVipassana
 from satipatthana.components.decoders.conditional import ConditionalDecoder
 from satipatthana.components.decoders.reconstruction import ReconstructionDecoder
 from satipatthana.components.decoders.auxiliary import SimpleAuxHead
+from satipatthana.data import VoidDataset
 
 
 # Constants
@@ -544,6 +545,100 @@ class TestNoiseStrategies:
         assert Stage2NoiseStrategy.AUGMENTED == 0
         assert Stage2NoiseStrategy.DRUNK == 1
         assert Stage2NoiseStrategy.MISMATCH == 2
+        assert Stage2NoiseStrategy.VOID == 3
+
+
+class TestVoidPath:
+    """Tests for Void Path (OOD data) in Stage 2."""
+
+    def test_void_path_disabled_by_default(self, system_full, training_args, dataset):
+        """Test that Void Path is disabled by default (no void_dataset)."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+        )
+        assert trainer.void_dataset is None
+
+    def test_void_path_with_dataset(self, system_full, training_args, dataset):
+        """Test that Void Path is enabled when void_dataset is provided."""
+        void_dataset = VoidDataset(DummyDataset(size=100))
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+            void_dataset=void_dataset,
+        )
+        assert trainer.void_dataset is not None
+
+    def test_void_path_samples_from_dataset(self, system_full, training_args, dataset):
+        """Test that Void Path samples OOD data from void_dataset."""
+        void_dataset = VoidDataset(DummyDataset(size=100))
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+            void_dataset=void_dataset,
+        )
+
+        void_data = trainer._sample_void_data(10, torch.device("cpu"))
+
+        assert void_data is not None
+        assert void_data.shape == (10, INPUT_DIM)
+
+    def test_void_path_returns_none_without_dataset(self, system_full, training_args, dataset):
+        """Test that _sample_void_data returns None when void_dataset is not set."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+        )
+
+        void_data = trainer._sample_void_data(10, torch.device("cpu"))
+        assert void_data is None
+
+    def test_stage2_loss_with_void_dataset(self, system_full, training_args, dataset):
+        """Test Stage 2 loss computation includes Void Path when void_dataset is provided."""
+        void_dataset = VoidDataset(DummyDataset(size=100))
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+            void_dataset=void_dataset,
+        )
+
+        batch = {"x": torch.randn(BATCH_SIZE, INPUT_DIM)}
+        loss, outputs = trainer.compute_loss(system_full, batch, return_outputs=True)
+
+        assert loss > 0
+        assert "trust_scores" in outputs
+        assert "targets" in outputs
+        # With void path, we have 5 paths worth of trust scores
+        # 4 ID paths + 1 void path (void_size = batch_size // 4)
+        expected_size = BATCH_SIZE + (BATCH_SIZE // 4)
+        assert outputs["trust_scores"].shape[0] == expected_size
+
+    def test_stage2_loss_without_void_dataset(self, system_full, training_args, dataset):
+        """Test Stage 2 loss computation without Void Path (no void_dataset)."""
+        trainer = SatipatthanaTrainer(
+            model=system_full,
+            args=training_args,
+            train_dataset=dataset,
+            stage=TrainingStage.VIPASSANA_TRAINING,
+        )
+
+        batch = {"x": torch.randn(BATCH_SIZE, INPUT_DIM)}
+        loss, outputs = trainer.compute_loss(system_full, batch, return_outputs=True)
+
+        assert loss > 0
+        assert "trust_scores" in outputs
+        # Without void_dataset, only 4 ID paths
+        assert outputs["trust_scores"].shape[0] == BATCH_SIZE
 
 
 class TestCurriculumTraining:

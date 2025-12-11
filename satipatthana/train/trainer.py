@@ -19,6 +19,7 @@ from transformers.trainer_utils import EvalPrediction
 
 from satipatthana.core.system import SatipatthanaSystem, TrainingStage
 from satipatthana.core.santana import SantanaLog
+from satipatthana.data import VoidDataset
 from satipatthana.components.objectives.vipassana import (
     VipassanaObjective,
     GuidanceLoss,
@@ -36,6 +37,7 @@ class Stage2NoiseStrategy(IntEnum):
     AUGMENTED = 0  # Environmental noise via Augmenter
     DRUNK = 1  # Internal dysfunction via drunk_mode
     MISMATCH = 2  # Logical inconsistency via batch shuffling
+    VOID = 3  # Out-of-distribution data (unknown territory)
 
 
 class SatipatthanaTrainer(Trainer):
@@ -62,6 +64,9 @@ class SatipatthanaTrainer(Trainer):
         guidance_weight: Weight for guidance loss (Stage 1)
         recon_weight: Weight for reconstruction loss (Stage 0, 1)
         callbacks: Optional list of callbacks
+        void_dataset: Optional VoidDataset for OOD data in Void Path (Stage 2).
+                     Use VoidDataset from satipatthana.data to wrap any data source.
+                     If None, Void Path is disabled.
     """
 
     def __init__(
@@ -88,6 +93,7 @@ class SatipatthanaTrainer(Trainer):
         recon_weight: float = 1.0,
         diversity_weight: float = 0.1,
         label_key: str = "y",
+        void_dataset: Optional[VoidDataset] = None,
     ):
         super().__init__(
             model=model,
@@ -125,6 +131,10 @@ class SatipatthanaTrainer(Trainer):
         self.recon_loss_fn = nn.MSELoss()
         self.task_loss_fn = nn.CrossEntropyLoss() if task_type == "classification" else nn.MSELoss()
         self.task_type = task_type
+
+        # Void Path configuration for Stage 2
+        self.void_dataset = void_dataset
+        self._void_indices: Optional[torch.Tensor] = None  # For random sampling from void_dataset
 
         # Set initial stage
         self.set_stage(stage)
@@ -282,34 +292,61 @@ class SatipatthanaTrainer(Trainer):
         logger.debug(f"Stage 1 loss: {total_loss.item():.4f}, components: {loss_components}")
         return total_loss, outputs
 
+    def _sample_void_data(self, batch_size: int, device: torch.device) -> Optional[torch.Tensor]:
+        """
+        Sample OOD data from void_dataset for Void Path.
+
+        Args:
+            batch_size: Number of OOD samples to sample
+            device: Target device for the tensor
+
+        Returns:
+            OOD tensor of shape (batch_size, *input_shape), or None if void_dataset is not set
+        """
+        if self.void_dataset is None:
+            return None
+
+        # Random sampling from VoidDataset (always returns {"x": tensor})
+        dataset_len = len(self.void_dataset)
+        indices = torch.randint(0, dataset_len, (batch_size,))
+
+        samples = [self.void_dataset[idx.item()]["x"] for idx in indices]
+        return torch.stack(samples).to(device)
+
     def _compute_stage2_loss(self, model: SatipatthanaSystem, x: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """
         Stage 2: Vipassana Training.
 
-        Uses 4 noise strategies to generate contrastive pairs (per training_strategy.md):
-        1. Clean path (No noise) - target: 1.0 (30% recommended)
-        2. Augmented path (Environmental Ambiguity) - target: 1.0 - severity (40% recommended)
-        3. Drunk path (Internal Dysfunction) - target: 0.0 (15% recommended)
-        4. Mismatch path (Logical Inconsistency) - target: 0.0 (15% recommended)
+        Uses up to 5 noise strategies to generate contrastive pairs:
+        1. Clean path (No noise) - target: 1.0
+        2. Augmented path (Environmental Ambiguity) - target: 1.0 - severity
+        3. Drunk path (Internal Dysfunction) - target: 0.0
+        4. Mismatch path (Logical Inconsistency) - target: 0.0
+        5. Void path (OOD data from void_dataset) - target: 0.0 (only if void_dataset is set)
+
+        When void_dataset=None, uses 4-way split (original behavior).
+        When void_dataset is provided, adds Void Path with samples from the dataset.
         """
         batch_size = x.size(0)
         device = x.device
 
-        # Split batch into 4 parts for different noise strategies
-        # Approximate ratios: Clean=30%, Augmented=40%, Drunk=15%, Mismatch=15%
-        # For simplicity, use equal splits (25% each)
-        split_size = batch_size // 4
-        remainder = batch_size % 4
+        # Split ID data into 4 parts (Clean, Augmented, Drunk, Mismatch)
+        # Void data is sampled separately from void_dataset
+        num_id_paths = 4
+        split_size = batch_size // num_id_paths
+        remainder = batch_size % num_id_paths
+        id_sizes = [split_size + (1 if i < remainder else 0) for i in range(num_id_paths)]
 
-        # Adjust split sizes
-        sizes = [split_size + (1 if i < remainder else 0) for i in range(4)]
-        x_splits = torch.split(x, sizes)
+        # Void size matches average ID split size (only if void_dataset is set)
+        void_size = split_size if self.void_dataset is not None else 0
+
+        x_splits = torch.split(x, id_sizes)  # Split ID data
 
         all_trust_scores = []
         all_targets = []
 
         # 1. Clean Path (No noise - baseline for high trust)
-        if sizes[0] > 0:
+        if id_sizes[0] > 0:
             x_clean = x_splits[0]
             result_clean = model.forward_stage2(x_clean, noise_level=0.0, drunk_mode=False)
             trust_clean = result_clean["trust_score"]
@@ -320,20 +357,20 @@ class SatipatthanaTrainer(Trainer):
             all_targets.append(target_clean)
 
         # 2. Augmented Path (Environmental Ambiguity)
-        if sizes[1] > 0:
+        if id_sizes[1] > 0:
             x_aug = x_splits[1]
             result_aug = model.forward_stage2(x_aug, noise_level=self.noise_level, drunk_mode=False)
             trust_aug = result_aug["trust_score"]
             # Target: 1.0 - severity (higher noise = lower trust target)
             # severity is already noise_level * max_noise_std, so don't multiply again
-            severity_aug = result_aug.get("severity", torch.zeros(sizes[1], device=device))
+            severity_aug = result_aug.get("severity", torch.zeros(id_sizes[1], device=device))
             target_aug = 1.0 - severity_aug.unsqueeze(-1)
 
             all_trust_scores.append(trust_aug)
             all_targets.append(target_aug)
 
         # 3. Drunk Path (Internal Dysfunction)
-        if sizes[2] > 0:
+        if id_sizes[2] > 0:
             x_drunk = x_splits[2]
             result_drunk = model.forward_stage2(x_drunk, noise_level=0.0, drunk_mode=True)
             trust_drunk = result_drunk["trust_score"]
@@ -344,7 +381,7 @@ class SatipatthanaTrainer(Trainer):
             all_targets.append(target_drunk)
 
         # 4. Mismatch Path (Logical Inconsistency)
-        if sizes[3] > 0:
+        if id_sizes[3] > 0:
             x_mismatch = x_splits[3]
             # First get normal S* and SantanaLog
             with torch.no_grad():
@@ -353,17 +390,31 @@ class SatipatthanaTrainer(Trainer):
                 santana_normal = samatha_output.santana
 
             # Shuffle S* within batch to create mismatch
-            perm = torch.randperm(sizes[3], device=device)
+            perm = torch.randperm(id_sizes[3], device=device)
             s_star_shuffled = s_star_normal[perm]
 
             # Pass mismatched (S*, SantanaLog) to Vipassana
-            v_ctx_mismatch, trust_mismatch = model.vipassana(s_star_shuffled, santana_normal)
+            # Get probes for semantic feature computation
+            probes = model.samatha.vitakka.probes
+            v_ctx_mismatch, trust_mismatch = model.vipassana(s_star_shuffled, santana_normal, probes=probes)
 
             # Target: 0.0 (mismatch should produce low trust)
             target_mismatch = torch.zeros_like(trust_mismatch)
 
             all_trust_scores.append(trust_mismatch)
             all_targets.append(target_mismatch)
+
+        # 5. Void Path (OOD data from void_dataset)
+        if void_size > 0:
+            x_void = self._sample_void_data(void_size, device)
+            if x_void is not None:
+                result_void = model.forward_stage2(x_void, noise_level=0.0, drunk_mode=False)
+                trust_void = result_void["trust_score"]
+                # Target: 0.0 (OOD input should produce low trust)
+                target_void = torch.zeros_like(trust_void)
+
+                all_trust_scores.append(trust_void)
+                all_targets.append(target_void)
 
         # Concatenate all results
         trust_scores = torch.cat(all_trust_scores, dim=0)
