@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class AdapterType(str, Enum):
+    IDENTITY = "identity"
     MLP = "mlp"
     CNN = "cnn"
     LSTM = "lstm"

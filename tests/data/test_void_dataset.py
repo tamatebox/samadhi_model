@@ -170,9 +170,7 @@ class TestVoidDatasetTransform:
         def normalize(x):
             return x / x.norm()
 
-        void_data = VoidDataset(
-            lambda: {"x": torch.randn(8)}, length=50, transform=normalize
-        )
+        void_data = VoidDataset(lambda: {"x": torch.randn(8)}, length=50, transform=normalize)
 
         sample = void_data[0]
         # Normalized vector should have norm ~= 1

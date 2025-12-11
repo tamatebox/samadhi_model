@@ -15,6 +15,17 @@ class BaseAdapterConfig(BaseConfig):
 
 
 @dataclass(kw_only=True)
+class IdentityAdapterConfig(BaseAdapterConfig):
+    """Config for IdentityAdapter. Passes input through unchanged."""
+
+    type: AdapterType = AdapterType.IDENTITY
+    input_dim: int  # Mandatory
+
+    def __post_init__(self):
+        self.dim = self.input_dim  # dim equals input_dim for identity
+
+
+@dataclass(kw_only=True)
 class MlpAdapterConfig(BaseAdapterConfig):
     type: AdapterType = AdapterType.MLP
     input_dim: int  # Mandatory
