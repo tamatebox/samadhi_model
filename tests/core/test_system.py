@@ -58,7 +58,10 @@ def system_config():
             vicara=StandardVicaraConfig(dim=LATENT_DIM, refine_steps=5),
             sati=FixedStepSatiConfig(),
         ),
-        vipassana=VipassanaEngineConfig(vipassana=StandardVipassanaConfig(context_dim=CONTEXT_DIM, hidden_dim=32)),
+        # context_dim = gru_hidden_dim + metric_proj_dim = 8 + 8 = 16
+        vipassana=VipassanaEngineConfig(
+            vipassana=StandardVipassanaConfig(latent_dim=LATENT_DIM, gru_hidden_dim=8, metric_proj_dim=8)
+        ),
         task_decoder=ConditionalDecoderConfig(
             dim=LATENT_DIM,
             context_dim=CONTEXT_DIM,
@@ -434,16 +437,20 @@ class TestGradientFlow:
         loss = v_ctx.sum()
         loss.backward()
 
-        # Vipassana encoder should have gradients (via v_ctx path)
-        # Note: trust_head parameters won't have gradients since trust_score
-        # is converted to scalar internally and loses gradient connection
+        # Vipassana should have gradients (via v_ctx path)
         vipassana_inner = system.vipassana.vipassana
-        encoder_has_gradients = False
-        for param in vipassana_inner._encoder.parameters():
+        vipassana_has_gradients = False
+        # Check trajectory_gru and metric_projector for gradients
+        for param in vipassana_inner.trajectory_gru.parameters():
             if param.requires_grad and param.grad is not None:
-                encoder_has_gradients = True
+                vipassana_has_gradients = True
                 break
-        assert encoder_has_gradients, "Vipassana encoder should have gradients"
+        if not vipassana_has_gradients:
+            for param in vipassana_inner.metric_projector.parameters():
+                if param.requires_grad and param.grad is not None:
+                    vipassana_has_gradients = True
+                    break
+        assert vipassana_has_gradients, "Vipassana should have gradients"
 
     def test_gradient_stage3(self, system):
         """Test gradient flow in Stage 3."""

@@ -1,5 +1,5 @@
 """
-SantanaLog: Trajectory logging for Satipatthana Framework v4.0.
+SantanaLog: Trajectory logging for Satipatthana Framework.
 
 Santāna (Stream of Consciousness) represents the continuous flow of mental states.
 This class captures the trajectory of states during the Vicara refinement loop,
@@ -7,7 +7,7 @@ enabling Vipassana to analyze the thinking process.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import torch
 
 
@@ -28,6 +28,7 @@ class SantanaLog:
     states: List[torch.Tensor] = field(default_factory=list)
     meta_history: List[Dict[str, Any]] = field(default_factory=list)
     energies: List[float] = field(default_factory=list)
+    convergence_steps: Optional[torch.Tensor] = None  # (Batch,) per-sample convergence step
 
     def add(
         self,
@@ -120,3 +121,27 @@ class SantanaLog:
             log.energies = self.energies.copy()
             result.append(log)
         return result
+
+    def get_padded_trajectory(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Convert trajectory to padded tensor with valid lengths for GRU processing.
+
+        Returns:
+            padded_states: (Steps, Batch, Dim) trajectory tensor
+            lengths: (Batch,) valid step count per sample (CPU LongTensor for pack_padded_sequence)
+        """
+        if not self.states:
+            return torch.empty(0), torch.empty(0, dtype=torch.long)
+
+        # Stack states: (Steps, Batch, Dim)
+        trajectory = torch.stack(self.states, dim=0)
+        steps, batch_size, _ = trajectory.shape
+
+        if self.convergence_steps is not None:
+            # Use recorded convergence steps (requires CPU for pack_padded_sequence)
+            lengths = self.convergence_steps.cpu().long()
+        else:
+            # Fallback: assume all samples use full steps
+            lengths = torch.full((batch_size,), steps, dtype=torch.long)
+
+        return trajectory, lengths

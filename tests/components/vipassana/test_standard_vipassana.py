@@ -1,5 +1,5 @@
 """
-Tests for StandardVipassana implementation.
+Tests for StandardVipassana implementation (v4.1 GRU-based).
 """
 
 import pytest
@@ -19,20 +19,34 @@ class TestStandardVipassana:
 
         assert vipassana.config is not None
         assert isinstance(vipassana.config, StandardVipassanaConfig)
-        assert vipassana.config.context_dim == 32
-        assert vipassana.config.hidden_dim == 64
+        # context_dim = gru_hidden_dim (32) + metric_proj_dim (32) = 64
+        assert vipassana.config.context_dim == 64
+        assert vipassana.config.gru_hidden_dim == 32
+        assert vipassana.config.metric_proj_dim == 32
+        assert vipassana.config.latent_dim == 64
 
     def test_custom_config(self):
         """Test initialization with custom config."""
-        config = StandardVipassanaConfig(context_dim=64, hidden_dim=128)
+        config = StandardVipassanaConfig(
+            latent_dim=128,
+            gru_hidden_dim=64,
+            metric_proj_dim=32,
+            max_steps=20,
+        )
         vipassana = StandardVipassana(config)
 
-        assert vipassana.config.context_dim == 64
-        assert vipassana.config.hidden_dim == 128
+        assert vipassana.config.latent_dim == 128
+        assert vipassana.config.gru_hidden_dim == 64
+        assert vipassana.config.metric_proj_dim == 32
+        assert vipassana.config.context_dim == 96  # 64 + 32
 
     def test_output_shapes(self):
         """Test that output shapes are correct."""
-        config = StandardVipassanaConfig(context_dim=32)
+        config = StandardVipassanaConfig(
+            latent_dim=64,
+            gru_hidden_dim=16,
+            metric_proj_dim=16,
+        )
         vipassana = StandardVipassana(config)
 
         batch_size = 4
@@ -46,13 +60,14 @@ class TestStandardVipassana:
         s_star = torch.randn(batch_size, state_dim)
         v_ctx, trust_score = vipassana(s_star, santana)
 
-        assert v_ctx.shape == (batch_size, 32)
+        assert v_ctx.shape == (batch_size, 32)  # 16 + 16
         assert isinstance(trust_score, torch.Tensor)
         assert trust_score.shape == (batch_size, 1)
 
     def test_trust_score_in_valid_range(self):
         """Test that trust score is in [0.0, 1.0] range."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         santana = SantanaLog()
         state = torch.randn(4, 32)
@@ -65,19 +80,21 @@ class TestStandardVipassana:
 
     def test_handles_empty_santana(self):
         """Test behavior with empty SantanaLog."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         santana = SantanaLog()  # Empty
         s_star = torch.randn(4, 32)
 
         v_ctx, trust_score = vipassana(s_star, santana)
 
-        assert v_ctx.shape == (4, 32)
+        assert v_ctx.shape == (4, 64)  # context_dim = 32 + 32
         assert (trust_score >= 0.0).all() and (trust_score <= 1.0).all()
 
     def test_handles_single_step(self):
         """Test with single step in trajectory."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         santana = SantanaLog()
         state = torch.randn(4, 32)
@@ -86,12 +103,13 @@ class TestStandardVipassana:
         s_star = torch.randn(4, 32)
         v_ctx, trust_score = vipassana(s_star, santana)
 
-        assert v_ctx.shape == (4, 32)
+        assert v_ctx.shape == (4, 64)
         assert (trust_score >= 0.0).all() and (trust_score <= 1.0).all()
 
     def test_handles_long_trajectory(self):
         """Test with long trajectory."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32, max_steps=30)
+        vipassana = StandardVipassana(config)
 
         santana = SantanaLog()
         state = torch.randn(4, 32)
@@ -101,13 +119,23 @@ class TestStandardVipassana:
         s_star = torch.randn(4, 32)
         v_ctx, trust_score = vipassana(s_star, santana)
 
-        assert v_ctx.shape == (4, 32)
+        assert v_ctx.shape == (4, 64)
         assert (trust_score >= 0.0).all() and (trust_score <= 1.0).all()
 
     def test_context_dim_customizable(self):
-        """Test that context_dim config is respected."""
-        for context_dim in [16, 32, 64, 128]:
-            config = StandardVipassanaConfig(context_dim=context_dim)
+        """Test that context_dim is computed from gru_hidden_dim + metric_proj_dim."""
+        test_cases = [
+            (8, 8, 16),
+            (16, 16, 32),
+            (32, 32, 64),
+            (64, 64, 128),
+        ]
+        for gru_dim, metric_dim, expected_ctx_dim in test_cases:
+            config = StandardVipassanaConfig(
+                latent_dim=32,
+                gru_hidden_dim=gru_dim,
+                metric_proj_dim=metric_dim,
+            )
             vipassana = StandardVipassana(config)
 
             santana = SantanaLog()
@@ -117,11 +145,12 @@ class TestStandardVipassana:
             s_star = torch.randn(4, 32)
             v_ctx, _ = vipassana(s_star, santana)
 
-            assert v_ctx.shape == (4, context_dim)
+            assert v_ctx.shape == (4, expected_ctx_dim)
 
     def test_different_batch_sizes(self):
         """Test with various batch sizes."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         for batch_size in [1, 4, 16, 32]:
             santana = SantanaLog()
@@ -131,75 +160,107 @@ class TestStandardVipassana:
             s_star = torch.randn(batch_size, 32)
             v_ctx, trust_score = vipassana(s_star, santana)
 
-            assert v_ctx.shape == (batch_size, 32)
+            assert v_ctx.shape == (batch_size, 64)
             assert trust_score.shape == (batch_size, 1)
             assert (trust_score >= 0.0).all() and (trust_score <= 1.0).all()
 
-    def test_different_state_dims(self):
-        """Test with various state dimensions."""
-        vipassana = StandardVipassana()
-
-        for state_dim in [16, 32, 64, 128]:
-            santana = SantanaLog()
-            state = torch.randn(4, state_dim)
-            santana.add(state, energy=0.1)
-
-            s_star = torch.randn(4, state_dim)
-            v_ctx, trust_score = vipassana(s_star, santana)
-
-            assert v_ctx.shape == (4, 32)
-            assert trust_score.shape == (4, 1)
-            assert (trust_score >= 0.0).all() and (trust_score <= 1.0).all()
-
-    def test_velocity_computed_from_trajectory(self):
-        """Test that velocity is computed from trajectory movement."""
-        vipassana = StandardVipassana()
-
-        # Case 1: No movement (initial = final)
-        santana1 = SantanaLog()
-        state = torch.zeros(4, 32)
-        santana1.add(state, energy=0.1)
-
-        s_star_same = torch.zeros(4, 32)
-        v_ctx1, _ = vipassana(s_star_same, santana1)
-
-        # Case 2: Large movement
-        santana2 = SantanaLog()
-        santana2.add(torch.zeros(4, 32), energy=0.1)
-
-        s_star_moved = torch.ones(4, 32) * 10
-        v_ctx2, _ = vipassana(s_star_moved, santana2)
-
-        # Context vectors should be different
-        assert not torch.allclose(v_ctx1, v_ctx2)
-
-    def test_energy_affects_context(self):
-        """Test that trajectory energy (computed from state changes) affects the context vector."""
-        vipassana = StandardVipassana()
+    def test_gru_encodes_trajectory_sequence(self):
+        """Test that GRU encodes sequence information (not just aggregation)."""
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         batch_size = 4
-        dim = 32
-        s_star = torch.randn(batch_size, dim)
 
-        # High energy trajectory: states oscillate wildly
-        santana_high = SantanaLog()
+        # Trajectory 1: increasing states
+        santana1 = SantanaLog()
         for i in range(5):
-            # Alternate between very different states
-            state = torch.randn(batch_size, dim) * (10.0 if i % 2 == 0 else -10.0)
-            santana_high.add(state)
-        v_ctx_high, _ = vipassana(s_star, santana_high)
+            state = torch.ones(batch_size, 32) * i
+            santana1.add(state)
 
-        # Low energy trajectory: states are very similar (smooth convergence)
-        santana_low = SantanaLog()
-        base_state = torch.randn(batch_size, dim)
-        for i in range(5):
-            # Add tiny perturbations
-            state = base_state + torch.randn(batch_size, dim) * 0.001
-            santana_low.add(state)
-        v_ctx_low, _ = vipassana(s_star, santana_low)
+        # Trajectory 2: decreasing states (same values, different order)
+        santana2 = SantanaLog()
+        for i in range(4, -1, -1):
+            state = torch.ones(batch_size, 32) * i
+            santana2.add(state)
 
-        # Context vectors should be different due to different trajectory energy
-        assert not torch.allclose(v_ctx_high, v_ctx_low)
+        s_star = torch.randn(batch_size, 32)
+        v_ctx1, _ = vipassana(s_star, santana1)
+        v_ctx2, _ = vipassana(s_star, santana2)
+
+        # GRU should produce different contexts for different sequences
+        assert not torch.allclose(v_ctx1, v_ctx2, atol=1e-3)
+
+    def test_convergence_steps_affects_metrics(self):
+        """Test that convergence_steps field is used in metrics computation."""
+        config = StandardVipassanaConfig(latent_dim=32, max_steps=10)
+        vipassana = StandardVipassana(config)
+
+        batch_size = 4
+
+        # Trajectory with early convergence
+        santana_early = SantanaLog()
+        for i in range(10):
+            santana_early.add(torch.randn(batch_size, 32))
+        santana_early.convergence_steps = torch.tensor([3, 3, 3, 3])
+
+        # Trajectory with late convergence
+        santana_late = SantanaLog()
+        for i in range(10):
+            santana_late.add(torch.randn(batch_size, 32))
+        santana_late.convergence_steps = torch.tensor([9, 9, 9, 9])
+
+        s_star = torch.randn(batch_size, 32)
+        v_ctx_early, _ = vipassana(s_star, santana_early)
+        v_ctx_late, _ = vipassana(s_star, santana_late)
+
+        # Different convergence steps should produce different contexts
+        assert not torch.allclose(v_ctx_early, v_ctx_late)
+
+    def test_with_probes(self):
+        """Test that probes affect semantic features."""
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
+
+        batch_size = 4
+        n_probes = 5
+
+        santana = SantanaLog()
+        santana.add(torch.randn(batch_size, 32))
+
+        # s_star close to probe 0
+        probes = torch.randn(n_probes, 32)
+        s_star_close = probes[0].unsqueeze(0).expand(batch_size, -1) + torch.randn(batch_size, 32) * 0.1
+
+        # s_star far from all probes
+        s_star_far = probes.mean(dim=0).unsqueeze(0).expand(batch_size, -1) + torch.randn(batch_size, 32) * 10
+
+        v_ctx_close, _ = vipassana(s_star_close, santana, probes=probes)
+        v_ctx_far, _ = vipassana(s_star_far, santana, probes=probes)
+
+        # Different proximity to probes should produce different contexts
+        assert not torch.allclose(v_ctx_close, v_ctx_far)
+
+    def test_with_recon_error(self):
+        """Test that recon_error affects context."""
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
+
+        batch_size = 4
+        santana = SantanaLog()
+        santana.add(torch.randn(batch_size, 32))
+
+        s_star = torch.randn(batch_size, 32)
+
+        # Low recon error (in-distribution)
+        recon_error_low = torch.ones(batch_size, 1) * 0.01
+        v_ctx_low, _ = vipassana(s_star, santana, recon_error=recon_error_low)
+
+        # High recon error (out-of-distribution)
+        recon_error_high = torch.ones(batch_size, 1) * 10.0
+        v_ctx_high, _ = vipassana(s_star, santana, recon_error=recon_error_high)
+
+        # Different recon errors should produce different contexts
+        assert not torch.allclose(v_ctx_low, v_ctx_high)
 
     def test_is_nn_module(self):
         """Test that StandardVipassana is an nn.Module."""
@@ -211,11 +272,6 @@ class TestStandardVipassana:
         """Test that vipassana has trainable parameters."""
         vipassana = StandardVipassana()
 
-        # First forward pass to initialize networks
-        santana = SantanaLog()
-        santana.add(torch.randn(4, 32), energy=0.1)
-        vipassana(torch.randn(4, 32), santana)
-
         # Check that parameters exist
         params = list(vipassana.parameters())
         assert len(params) > 0
@@ -226,13 +282,40 @@ class TestStandardVipassana:
 
     def test_device_consistency(self):
         """Test that output device matches input device."""
-        vipassana = StandardVipassana()
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
 
         santana = SantanaLog()
         state = torch.randn(4, 32)
         santana.add(state, energy=0.1)
 
         s_star = torch.randn(4, 32)
-        v_ctx, _ = vipassana(s_star, santana)
+        v_ctx, trust_score = vipassana(s_star, santana)
 
         assert v_ctx.device == s_star.device
+        assert trust_score.device == s_star.device
+
+    def test_num_metrics_constant(self):
+        """Test that NUM_METRICS is correctly set."""
+        assert StandardVipassana.NUM_METRICS == 8
+
+    def test_gradient_flow(self):
+        """Test that gradients flow through the model."""
+        config = StandardVipassanaConfig(latent_dim=32)
+        vipassana = StandardVipassana(config)
+
+        santana = SantanaLog()
+        state = torch.randn(4, 32)
+        santana.add(state)
+        santana.add(state + torch.randn(4, 32) * 0.1)
+
+        s_star = torch.randn(4, 32, requires_grad=True)
+        v_ctx, trust_score = vipassana(s_star, santana)
+
+        # Backprop through trust_score
+        loss = trust_score.mean()
+        loss.backward()
+
+        # Check gradients exist
+        assert s_star.grad is not None
+        assert not torch.all(s_star.grad == 0)

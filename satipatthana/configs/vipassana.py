@@ -20,11 +20,27 @@ class StandardVipassanaConfig(BaseVipassanaConfig):
     """
     Configuration for Standard Vipassana.
 
-    Uses a simple encoder to compress the trajectory into context.
+    Uses GRU to encode trajectory dynamics and MLP to project grounding metrics.
+    The context vector V_ctx is the concatenation of both branches.
+
+    Attributes:
+        latent_dim: Dimension of input S* state
+        gru_hidden_dim: Hidden dimension for trajectory GRU encoder (Dynamic Context)
+        metric_proj_dim: Projection dimension for 8 grounding metrics (Static Context)
+        max_steps: Maximum refinement steps (for normalizing convergence_steps)
+        context_dim: Auto-computed as gru_hidden_dim + metric_proj_dim
     """
 
     type: VipassanaType = VipassanaType.STANDARD
-    hidden_dim: int = 64  # Hidden dimension for encoder
+    latent_dim: int = 64
+    gru_hidden_dim: int = 32
+    metric_proj_dim: int = 32
+    max_steps: int = 10
+    context_dim: int = 64  # Default, will be overwritten in __post_init__
+
+    def __post_init__(self):
+        """Auto-compute context_dim from component dimensions."""
+        self.context_dim = self.gru_hidden_dim + self.metric_proj_dim
 
 
 @dataclass

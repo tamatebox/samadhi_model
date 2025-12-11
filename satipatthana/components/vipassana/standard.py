@@ -1,14 +1,16 @@
 """
-StandardVipassana: Simple trajectory encoder with confidence monitoring.
+StandardVipassana: GRU-based trajectory encoder with grounding metrics.
 
-Uses mean/variance aggregation across the trajectory to produce
-a context vector and trust score.
+Encodes the thinking process (trajectory) using a GRU for dynamic context,
+and projects 8 grounding metrics for static context. The two are fused
+to produce V_ctx and trust_score.
 """
 
 from typing import Tuple, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from satipatthana.components.vipassana.base import BaseVipassana
 from satipatthana.core.santana import SantanaLog
@@ -17,56 +19,61 @@ from satipatthana.configs.vipassana import StandardVipassanaConfig
 
 class StandardVipassana(BaseVipassana):
     """
-    Standard Vipassana using mean/variance trajectory aggregation.
+    Standard Vipassana with GRU trajectory encoder and grounding metrics fusion.
 
-    Extracts features from the convergence trajectory:
-    - Position: Final converged state
-    - Velocity: Movement from initial to final state
-    - Smoothness: Inverse of energy variance (lower = smoother)
+    Architecture:
+        Branch 1 (Dynamic): GRU encodes variable-length trajectory -> dynamic context
+        Branch 2 (Static): 8 metrics -> MLP projection -> static context
+        Fusion: Concat(dynamic, static) -> V_ctx
 
-    The trust score reflects:
-    - Process quality: Fewer steps, lower energy = smoother convergence
-    - Semantic validity: Proximity to known concepts (Probes) = higher trust
+    8 Grounding Metrics:
+        1. velocity: ||S_T - S_{T-1}|| (final movement)
+        2. avg_energy: mean(||S_t - S_{t-1}||^2) over valid steps
+        3. convergence_steps: t / max_steps (normalized thinking time)
+        4. min_dist: min(||S* - P||) (familiarity)
+        5. entropy: probe distribution entropy (ambiguity)
+        6. s0_min_dist: min(||S0 - P||) (initial OOD degree)
+        7. drift_magnitude: ||S* - S0|| (total movement)
+        8. recon_error: reconstruction loss (reality check)
     """
+
+    NUM_METRICS = 8
 
     def __init__(self, config: StandardVipassanaConfig = None):
         if config is None:
             config = StandardVipassanaConfig()
         super().__init__(config)
 
-        self.hidden_dim = config.hidden_dim
-        self.context_dim = config.context_dim
+        self.latent_dim = config.latent_dim
+        self.gru_hidden_dim = config.gru_hidden_dim
+        self.metric_proj_dim = config.metric_proj_dim
+        self.max_steps = config.max_steps
 
-        # Will be initialized on first forward pass when dim is known
-        self._encoder = None
-        self._trust_head = None
-        self._input_dim = None
+        self._build_networks()
 
-    def _build_networks(self, state_dim: int):
-        """Build encoder networks once state dimension is known."""
-        # Feature vector for context: [s_star (dim), velocity_norm (1), avg_energy (1)]
-        feature_dim = state_dim + 2
-        self._input_dim = state_dim
-
-        self._encoder = nn.Sequential(
-            nn.Linear(feature_dim, self.hidden_dim),
-            nn.ReLU(),
-            nn.Linear(self.hidden_dim, self.context_dim),
+    def _build_networks(self):
+        """Build encoder networks."""
+        # Branch 1: Dynamic Context - GRU for trajectory encoding
+        self.trajectory_gru = nn.GRU(
+            input_size=self.latent_dim,
+            hidden_size=self.gru_hidden_dim,
+            num_layers=1,
+            batch_first=False,  # Input: (Steps, Batch, Dim)
         )
 
-        # Trust head uses trajectory quality + semantic features + grounding features
-        # - velocity: convergence speed
-        # - avg_energy: trajectory smoothness
-        # - min_dist: distance from S* to nearest Probe (familiarity)
-        # - entropy: ambiguity across Probes
-        # - s0_min_dist: distance from s0 to nearest Probe (initial OOD degree)
-        # - drift_magnitude: ||S* - s0|| (convergence drift)
-        # - recon_error: reconstruction error (optional, for OOD detection)
-        trust_feature_dim = 7  # velocity + avg_energy + min_dist + entropy + s0_min_dist + drift + recon_error
-        self._trust_head = nn.Sequential(
-            nn.Linear(trust_feature_dim, self.hidden_dim // 2),
+        # Branch 2: Static Context - MLP for metrics projection
+        self.metric_projector = nn.Sequential(
+            nn.Linear(self.NUM_METRICS, self.metric_proj_dim * 2),
             nn.ReLU(),
-            nn.Linear(self.hidden_dim // 2, 1),
+            nn.Linear(self.metric_proj_dim * 2, self.metric_proj_dim),
+        )
+
+        # Trust head: takes fused context to produce trust score
+        fused_dim = self.gru_hidden_dim + self.metric_proj_dim
+        self.trust_head = nn.Sequential(
+            nn.Linear(fused_dim, fused_dim // 2),
+            nn.ReLU(),
+            nn.Linear(fused_dim // 2, 1),
             nn.Sigmoid(),
         )
 
@@ -81,90 +88,164 @@ class StandardVipassana(BaseVipassana):
         Returns:
             dists: Pairwise distances (Batch, N_probes)
         """
-        # ||s - p||^2 = ||s||^2 + ||p||^2 - 2 * s @ p^T
-        points_sq = (points**2).sum(dim=1, keepdim=True)  # (B, 1)
-        probes_sq = (probes**2).sum(dim=1, keepdim=True).T  # (1, K)
-        cross_term = torch.mm(points, probes.T)  # (B, K)
-        dists_sq = points_sq + probes_sq - 2 * cross_term  # (B, K)
-        return torch.sqrt(dists_sq.clamp(min=1e-9))  # (B, K)
+        points_sq = (points**2).sum(dim=1, keepdim=True)
+        probes_sq = (probes**2).sum(dim=1, keepdim=True).T
+        cross_term = torch.mm(points, probes.T)
+        dists_sq = points_sq + probes_sq - 2 * cross_term
+        return torch.sqrt(dists_sq.clamp(min=1e-9))
 
-    def _compute_semantic_features(
-        self, s_star: torch.Tensor, probes: Optional[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compile_metrics(
+        self,
+        s_star: torch.Tensor,
+        santana: SantanaLog,
+        probes: Optional[torch.Tensor],
+        recon_error: Optional[torch.Tensor],
+    ) -> torch.Tensor:
         """
-        Compute semantic features from S* and Probes.
+        Compute and normalize all 8 grounding metrics with mask support.
 
         Args:
             s_star: Converged state (Batch, Dim)
+            santana: Trajectory log with convergence_steps
             probes: Probe vectors (N_probes, Dim) or None
+            recon_error: Per-sample reconstruction error (Batch, 1) or None
 
         Returns:
-            min_dist: Distance to nearest Probe (Batch, 1) - "Familiarity"
-            entropy: Probe distribution entropy (Batch, 1) - "Ambiguity"
+            metrics: Normalized metrics tensor (Batch, 8)
         """
         batch_size = s_star.size(0)
         device = s_star.device
         dtype = s_star.dtype
 
-        if probes is None:
-            # Fallback: return neutral values when probes not available
-            return (
-                torch.zeros(batch_size, 1, device=device, dtype=dtype),
-                torch.zeros(batch_size, 1, device=device, dtype=dtype),
-            )
+        trajectory, lengths = santana.get_padded_trajectory()
+        # trajectory: (Steps, Batch, Dim), lengths: (Batch,) CPU
 
-        # Compute pairwise L2 distances (MPS-compatible)
-        dists = self._compute_pairwise_distances(s_star, probes)
+        s0 = santana.get_initial_state()
+        if s0 is None:
+            s0 = s_star
 
-        # (a) Minimum distance to nearest Probe ("Familiarity")
-        # Lower = more familiar with known concepts
-        min_dist, _ = torch.min(dists, dim=1, keepdim=True)  # (Batch, 1)
+        # Handle empty trajectory case
+        if trajectory.numel() == 0:
+            num_steps = 0
+            lengths_device = torch.ones(batch_size, device=device)  # Fallback: 1 step
+        else:
+            num_steps = trajectory.size(0)
+            lengths_device = lengths.to(device).float()
 
-        # (b) Entropy of Probe distribution ("Ambiguity")
-        # Convert distances to probabilities via softmax(-dist)
-        # Higher entropy = more uncertain about which concept it belongs to
-        probs = F.softmax(-dists, dim=1)  # (Batch, N_probes)
-        entropy = -(probs * torch.log(probs + 1e-9)).sum(dim=1, keepdim=True)  # (Batch, 1)
+        # 1. velocity: ||S_T - S_{T-1}||
+        if num_steps >= 2:
+            # Get each sample's final valid state and previous state
+            # For simplicity, use the last recorded state difference
+            final_diff = trajectory[-1] - trajectory[-2] if num_steps >= 2 else torch.zeros_like(s_star)
+            final_diff = final_diff.to(device)
+            velocity = torch.norm(final_diff, dim=1, keepdim=True)
+        else:
+            velocity = torch.zeros(batch_size, 1, device=device, dtype=dtype)
 
-        return min_dist, entropy
+        # 2. avg_energy: masked average of ||S_t - S_{t-1}||^2
+        if num_steps >= 2:
+            trajectory_device = trajectory.to(device)
+            state_diffs = trajectory_device[1:] - trajectory_device[:-1]  # (Steps-1, Batch, Dim)
+            step_energies = (state_diffs**2).sum(dim=2)  # (Steps-1, Batch)
 
-    def _compute_grounding_features(
-        self, s_star: torch.Tensor, s0: torch.Tensor, probes: Optional[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Compute grounding features for OOD detection.
+            # Create mask for valid steps: step < convergence_steps - 1
+            step_indices = torch.arange(num_steps - 1, device=device).unsqueeze(1)  # (Steps-1, 1)
+            valid_mask = step_indices < (lengths_device.unsqueeze(0) - 1)  # (Steps-1, Batch)
 
-        These features capture information BEFORE Vicara convergence,
-        which is essential for detecting OOD inputs that would otherwise
-        be "pulled" to familiar attractor regions.
+            # Masked sum and count
+            masked_energies = step_energies * valid_mask.float()
+            valid_counts = valid_mask.float().sum(dim=0).clamp(min=1)  # (Batch,)
+            avg_energy = (masked_energies.sum(dim=0) / valid_counts).unsqueeze(1)  # (Batch, 1)
+        else:
+            avg_energy = torch.zeros(batch_size, 1, device=device, dtype=dtype)
 
-        Args:
-            s_star: Converged state (Batch, Dim)
-            s0: Initial state from Vitakka (Batch, Dim)
-            probes: Probe vectors (N_probes, Dim) or None
+        # 3. convergence_steps: t / max_steps (linear normalization)
+        convergence_steps_norm = (lengths_device / self.max_steps).unsqueeze(1)  # (Batch, 1)
 
-        Returns:
-            s0_min_dist: Distance from s0 to nearest Probe (Batch, 1) - "Initial OOD degree"
-            drift_magnitude: ||S* - s0|| (Batch, 1) - "Convergence drift"
-        """
-        batch_size = s_star.size(0)
-        device = s_star.device
-        dtype = s_star.dtype
+        # 4. min_dist: min(||S* - P||) (familiarity)
+        # 5. entropy: probe distribution entropy (ambiguity)
+        if probes is not None:
+            dists = self._compute_pairwise_distances(s_star, probes)
+            min_dist, _ = torch.min(dists, dim=1, keepdim=True)
+            probs = F.softmax(-dists, dim=1)
+            entropy = -(probs * torch.log(probs + 1e-9)).sum(dim=1, keepdim=True)
+        else:
+            min_dist = torch.zeros(batch_size, 1, device=device, dtype=dtype)
+            entropy = torch.zeros(batch_size, 1, device=device, dtype=dtype)
 
-        # Drift magnitude: how far did Vicara move the state?
+        # 6. s0_min_dist: min(||S0 - P||) (initial OOD degree)
+        if probes is not None:
+            s0_dists = self._compute_pairwise_distances(s0, probes)
+            s0_min_dist, _ = torch.min(s0_dists, dim=1, keepdim=True)
+        else:
+            s0_min_dist = torch.zeros(batch_size, 1, device=device, dtype=dtype)
+
+        # 7. drift_magnitude: ||S* - S0||
         drift_magnitude = torch.norm(s_star - s0, dim=1, keepdim=True)
 
-        if probes is None:
-            return (
-                torch.zeros(batch_size, 1, device=device, dtype=dtype),
-                drift_magnitude,
-            )
+        # 8. recon_error
+        if recon_error is None:
+            recon_error = torch.zeros(batch_size, 1, device=device, dtype=dtype)
 
-        # s0's distance to nearest Probe (OOD degree BEFORE convergence)
-        s0_dists = self._compute_pairwise_distances(s0, probes)
-        s0_min_dist, _ = torch.min(s0_dists, dim=1, keepdim=True)
+        # Apply normalization: log1p for unbounded, none for bounded
+        metrics = torch.cat(
+            [
+                torch.log1p(velocity),  # 1. velocity
+                torch.log1p(avg_energy),  # 2. avg_energy
+                convergence_steps_norm,  # 3. convergence_steps (already 0-1)
+                torch.log1p(min_dist),  # 4. min_dist
+                entropy,  # 5. entropy (already bounded)
+                torch.log1p(s0_min_dist),  # 6. s0_min_dist
+                torch.log1p(drift_magnitude),  # 7. drift_magnitude
+                torch.log1p(recon_error),  # 8. recon_error
+            ],
+            dim=1,
+        )  # (Batch, 8)
 
-        return s0_min_dist, drift_magnitude
+        return metrics
+
+    def _encode_trajectory(self, santana: SantanaLog, device: torch.device, batch_size: int) -> torch.Tensor:
+        """
+        Encode trajectory using GRU with pack_padded_sequence for variable-length support.
+
+        Args:
+            santana: Trajectory log
+            device: Target device
+            batch_size: Batch size (for empty trajectory fallback)
+
+        Returns:
+            dynamic_context: GRU final hidden state (Batch, gru_hidden_dim)
+        """
+        trajectory, lengths = santana.get_padded_trajectory()
+        # trajectory: (Steps, Batch, Dim), lengths: (Batch,) CPU LongTensor
+
+        if trajectory.numel() == 0:
+            # Empty trajectory fallback
+            return torch.zeros(batch_size, self.gru_hidden_dim, device=device)
+
+        trajectory = trajectory.to(device)
+        batch_size = trajectory.size(1)
+
+        # Ensure lengths are valid (at least 1, at most num_steps)
+        num_steps = trajectory.size(0)
+        lengths = lengths.clamp(min=1, max=num_steps)
+
+        # Sort by length (descending) for pack_padded_sequence
+        lengths_sorted, sort_indices = lengths.sort(descending=True)
+        trajectory_sorted = trajectory[:, sort_indices, :]
+
+        # Pack sequence
+        packed = pack_padded_sequence(trajectory_sorted, lengths_sorted.cpu(), batch_first=False, enforce_sorted=True)
+
+        # Run GRU
+        _, hidden = self.trajectory_gru(packed)  # hidden: (1, Batch, hidden_dim)
+        hidden = hidden.squeeze(0)  # (Batch, hidden_dim)
+
+        # Unsort to restore original order
+        _, unsort_indices = sort_indices.sort()
+        dynamic_context = hidden[unsort_indices]
+
+        return dynamic_context
 
     def forward(
         self,
@@ -181,81 +262,25 @@ class StandardVipassana(BaseVipassana):
             santana: SantanaLog containing the thinking trajectory
             probes: Probe vectors from Vitakka (N_probes, Dim), optional
             recon_error: Per-sample reconstruction error (Batch, 1), optional
-                        High recon_error indicates OOD input (input doesn't match
-                        what the model learned to reconstruct)
 
         Returns:
-            v_ctx: Context vector (Batch, context_dim) - embedding of "doubt"
-            trust_score: Confidence tensor (Batch, 1) for external control
+            v_ctx: Context vector (Batch, context_dim) - fused dynamic + static context
+            trust_score: Confidence tensor (Batch, 1)
         """
-        batch_size, state_dim = s_star.shape
+        batch_size = s_star.size(0)
         device = s_star.device
-        dtype = s_star.dtype
 
-        # Lazy initialization of networks
-        if self._encoder is None or self._input_dim != state_dim:
-            self._build_networks(state_dim)
-            self._encoder = self._encoder.to(device)
-            self._trust_head = self._trust_head.to(device)
+        # Branch 1: Dynamic Context from trajectory GRU
+        dynamic_context = self._encode_trajectory(santana, device, batch_size)  # (Batch, gru_hidden_dim)
 
-        # Extract trajectory features
-        num_steps = len(santana)
-        initial_state = santana.get_initial_state()
+        # Branch 2: Static Context from grounding metrics
+        metrics = self._compile_metrics(s_star, santana, probes, recon_error)  # (Batch, 8)
+        static_context = self.metric_projector(metrics)  # (Batch, metric_proj_dim)
 
-        # Compute velocity (distance from initial to final state)
-        if initial_state is not None:
-            velocity = torch.norm(s_star - initial_state, dim=1, keepdim=True)
-        else:
-            velocity = torch.zeros(batch_size, 1, device=device, dtype=dtype)
+        # Fusion: concatenate dynamic and static context
+        v_ctx = torch.cat([dynamic_context, static_context], dim=1)  # (Batch, context_dim)
 
-        # Compute per-sample average energy from trajectory states
-        # Energy = ||s_t - s_{t-1}||^2 summed over steps
-        if num_steps >= 2:
-            states_tensor = santana.to_tensor()  # (num_steps, batch_size, dim)
-            # Compute state differences: s_t - s_{t-1}
-            state_diffs = states_tensor[1:] - states_tensor[:-1]  # (num_steps-1, batch, dim)
-            # Per-sample energy: sum of squared norms
-            per_sample_energy = (state_diffs**2).sum(dim=2).sum(dim=0)  # (batch,)
-            avg_energy_tensor = (per_sample_energy / (num_steps - 1)).unsqueeze(1)  # (batch, 1)
-        else:
-            avg_energy_tensor = torch.zeros(batch_size, 1, device=device, dtype=dtype)
-
-        # Compute semantic features from S* and Probes
-        min_dist, entropy = self._compute_semantic_features(s_star, probes)
-
-        # Compute grounding features (s0-based OOD detection)
-        s0 = initial_state if initial_state is not None else s_star
-        s0_min_dist, drift_magnitude = self._compute_grounding_features(s_star, s0, probes)
-
-        # Build feature vector for context: [s_star, velocity_norm, avg_energy]
-        features = torch.cat([s_star, velocity, avg_energy_tensor], dim=1)
-
-        # Encode to context vector
-        v_ctx = self._encoder(features)
-
-        # Compute trust score from:
-        # - Process quality: velocity, avg_energy (how smoothly did it converge?)
-        # - Semantic validity: min_dist, entropy (is the result in known territory?)
-        # - Grounding: s0_min_dist, drift (was input OOD before convergence?)
-        # - Reality check: recon_error (does S* reconstruct the input faithfully?)
-        # Use log1p to normalize scale while preserving per-sample differences
-
-        # Handle optional recon_error (default to 0 if not provided)
-        if recon_error is None:
-            recon_error = torch.zeros(batch_size, 1, device=device, dtype=dtype)
-
-        trust_features = torch.cat(
-            [
-                torch.log1p(velocity),
-                torch.log1p(avg_energy_tensor),
-                torch.log1p(min_dist),
-                entropy,  # Already normalized (0 to log(K))
-                torch.log1p(s0_min_dist),  # Key for OOD detection
-                torch.log1p(drift_magnitude),  # Large drift = suspicious
-                torch.log1p(recon_error),  # Large error = OOD / hallucination
-            ],
-            dim=1,
-        )  # (Batch, 7)
-        trust_score = self._trust_head(trust_features)  # (Batch, 1)
+        # Trust score from fused context
+        trust_score = self.trust_head(v_ctx)  # (Batch, 1)
 
         return v_ctx, trust_score

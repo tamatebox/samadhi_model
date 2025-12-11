@@ -95,8 +95,12 @@ class TestVipassanaConfig:
         """Test StandardVipassanaConfig defaults."""
         config = StandardVipassanaConfig()
         assert config.type == VipassanaType.STANDARD
-        assert config.context_dim == 32
-        assert config.hidden_dim == 64
+        # context_dim = gru_hidden_dim (32) + metric_proj_dim (32) = 64
+        assert config.context_dim == 64
+        assert config.gru_hidden_dim == 32
+        assert config.metric_proj_dim == 32
+        assert config.latent_dim == 64
+        assert config.max_steps == 10
 
     def test_lstm_vipassana_default(self):
         """Test LSTMVipassanaConfig defaults."""

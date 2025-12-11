@@ -70,7 +70,8 @@ def samatha_engine(default_config):
 @pytest.fixture
 def vipassana_config():
     """Default VipassanaEngineConfig for testing."""
-    return VipassanaEngineConfig(vipassana=StandardVipassanaConfig(context_dim=16, hidden_dim=32))
+    # context_dim = gru_hidden_dim + metric_proj_dim = 8 + 8 = 16
+    return VipassanaEngineConfig(vipassana=StandardVipassanaConfig(latent_dim=32, gru_hidden_dim=8, metric_proj_dim=8))
 
 
 @pytest.fixture

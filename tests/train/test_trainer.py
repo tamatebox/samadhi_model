@@ -76,7 +76,10 @@ def system_config():
             vicara=StandardVicaraConfig(dim=LATENT_DIM, refine_steps=3),
             sati=FixedStepSatiConfig(),
         ),
-        vipassana=VipassanaEngineConfig(vipassana=StandardVipassanaConfig(context_dim=CONTEXT_DIM, hidden_dim=32)),
+        # context_dim = gru_hidden_dim + metric_proj_dim = 8 + 8 = 16
+        vipassana=VipassanaEngineConfig(
+            vipassana=StandardVipassanaConfig(latent_dim=LATENT_DIM, gru_hidden_dim=8, metric_proj_dim=8)
+        ),
         task_decoder=ConditionalDecoderConfig(
             dim=LATENT_DIM,
             context_dim=CONTEXT_DIM,

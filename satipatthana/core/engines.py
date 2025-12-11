@@ -197,14 +197,23 @@ class SamathaEngine(nn.Module):
             santana: Complete trajectory log
             stability_pair: (s_T, s_T_1) with gradients for StabilityLoss
         """
+        batch_size = s0.size(0)
+        device = s0.device
+
         santana = SantanaLog()
         s_t = s0
         s_prev_grad = s0  # Track previous state WITH gradients for StabilityLoss
+
+        # Track per-sample convergence steps (for variable-length GRU in Vipassana)
+        convergence_steps = torch.full((batch_size,), self.config.max_steps, dtype=torch.long, device=device)
+        has_stopped = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        final_step = 0
 
         # Record initial state
         santana.add(s_t, meta={"step": 0, "type": "initial"})
 
         for step in range(self.config.max_steps):
+            final_step = step + 1
             s_prev_for_energy = s_t.clone()
             # Keep previous state with gradients for stability loss
             s_prev_grad = s_t
@@ -235,9 +244,26 @@ class SamathaEngine(nn.Module):
 
             # Check stopping condition via Sati
             should_stop, sati_info = self.sati(s_t, santana)
-            if should_stop:
+
+            # Record convergence step for newly stopped samples
+            if isinstance(should_stop, torch.Tensor):
+                # Per-sample stopping (future support)
+                newly_stopped = should_stop & (~has_stopped)
+                convergence_steps[newly_stopped] = step + 1
+                has_stopped = has_stopped | should_stop
+                all_stopped = has_stopped.all().item()
+            else:
+                # Global stopping (current behavior)
+                all_stopped = should_stop
+
+            if all_stopped:
+                # All samples stopped: record convergence step for those not yet marked
+                convergence_steps[~has_stopped] = step + 1
                 logger.debug(f"Sati stopped at step {step + 1}: {sati_info.get('reason', 'unknown')}")
                 break
+
+        # Store convergence steps in santana log
+        santana.convergence_steps = convergence_steps
 
         # Return stability_pair with gradients: (s_T, s_T_1)
         stability_pair = (s_t, s_prev_grad)

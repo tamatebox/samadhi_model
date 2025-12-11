@@ -72,8 +72,8 @@ class TestBaseVipassana:
 
     def test_context_vector_shape(self):
         """Test that context vector has correct shape."""
-        context_dim = 16
-        config = StandardVipassanaConfig(context_dim=context_dim)
+        # StandardVipassanaConfig computes context_dim = gru_hidden_dim + metric_proj_dim
+        config = StandardVipassanaConfig(gru_hidden_dim=8, metric_proj_dim=8)
         vipassana = MockVipassana(config)
 
         batch_size = 8
@@ -83,7 +83,8 @@ class TestBaseVipassana:
 
         v_ctx, _ = vipassana(s_star, santana)
 
-        assert v_ctx.shape == (batch_size, context_dim)
+        assert v_ctx.shape == (batch_size, config.context_dim)
+        assert config.context_dim == 16  # 8 + 8
 
     def test_trust_score_range(self):
         """Test that trust score is in valid range [0, 1]."""
@@ -121,11 +122,11 @@ class TestBaseVipassana:
 
     def test_config_stored(self):
         """Test that config is properly stored."""
-        config = StandardVipassanaConfig(context_dim=64, hidden_dim=128)
+        config = StandardVipassanaConfig(gru_hidden_dim=32, metric_proj_dim=32)
         vipassana = MockVipassana(config)
 
         assert vipassana.config is config
-        assert vipassana.config.context_dim == 64
+        assert vipassana.config.context_dim == 64  # 32 + 32
 
     def test_lstm_config(self):
         """Test LSTMVipassanaConfig can be used."""
