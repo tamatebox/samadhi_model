@@ -71,17 +71,31 @@
 
 ### 3.1. データフロー概要
 
-```txt
-Raw Input (X)
-    ↓
-[SamathaEngine]
-    Augmenter → Adapter → Vitakka → Vicara loop (w/ Sati) → S*, SantanaLog
-    ↓
-[VipassanaEngine]
-    S* + SantanaLog → V_ctx, α (trust_score)
-    ↓
-[ConditionalDecoder]
-    S* + V_ctx → Output (Y)
+```mermaid
+flowchart TB
+    subgraph Input
+        X["Raw Input (X)"]
+    end
+
+    subgraph SamathaEngine["SamathaEngine"]
+        aug["Augmenter"] --> adapt["Adapter"]
+        adapt --> vitakka["Vitakka"]
+        vitakka --> vicara["Vicara loop<br/>(w/ Sati)"]
+        vicara --> sstar["S*, SantanaLog"]
+    end
+
+    subgraph VipassanaEngine["VipassanaEngine"]
+        vip_in["S* + SantanaLog"] --> vip_out["V_ctx, α (trust_score)"]
+    end
+
+    subgraph Decoder["ConditionalDecoder"]
+        dec_in["S* + V_ctx"] --> dec_out["Output (Y)"]
+    end
+
+    X --> aug
+    sstar --> vip_in
+    sstar --> dec_in
+    vip_out --> dec_in
 ```
 
 ### 3.2. クラス図
@@ -263,7 +277,7 @@ flowchart TB
     hdyn --> concat["Concat"]
     hstatic --> concat
     concat --> vctx["V_ctx (Batch, context_dim)"]
-    vctx --> trust["Trust Head"]
+    metrics --> trust["Trust Head"]
     trust --> alpha["α (Batch, 1)"]
 ```
 

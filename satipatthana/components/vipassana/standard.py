@@ -10,7 +10,7 @@ from typing import Tuple, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence
 
 from satipatthana.components.vipassana.base import BaseVipassana
 from satipatthana.core.santana import SantanaLog
@@ -68,12 +68,11 @@ class StandardVipassana(BaseVipassana):
             nn.Linear(self.metric_proj_dim * 2, self.metric_proj_dim),
         )
 
-        # Trust head: takes fused context to produce trust score
-        fused_dim = self.gru_hidden_dim + self.metric_proj_dim
+        # Trust head: takes grounding metrics to produce trust score
         self.trust_head = nn.Sequential(
-            nn.Linear(fused_dim, fused_dim // 2),
+            nn.Linear(self.NUM_METRICS, 2 * self.NUM_METRICS),
             nn.ReLU(),
-            nn.Linear(fused_dim // 2, 1),
+            nn.Linear(2 * self.NUM_METRICS, 1),
             nn.Sigmoid(),
         )
 
@@ -132,12 +131,22 @@ class StandardVipassana(BaseVipassana):
             num_steps = trajectory.size(0)
             lengths_device = lengths.to(device).float()
 
-        # 1. velocity: ||S_T - S_{T-1}||
+        # 1. velocity: ||S* - S_{T-1}|| (final movement)
         if num_steps >= 2:
-            # Get each sample's final valid state and previous state
-            # For simplicity, use the last recorded state difference
-            final_diff = trajectory[-1] - trajectory[-2] if num_steps >= 2 else torch.zeros_like(s_star)
-            final_diff = final_diff.to(device)
+            # Use s_star (converged state) and the state before it
+            # prev_indices = lengths - 2 (0-indexed), clamped to valid range
+            trajectory_device = trajectory.to(device)
+            prev_indices = (lengths_device - 2).clamp(min=0).long()
+
+            # trajectory: (Steps, Batch, Dim) -> (Batch, Steps, Dim) for gather
+            traj_batch_first = trajectory_device.permute(1, 0, 2)
+
+            # Gather S_{T-1} for each sample using their individual prev_indices
+            batch_indices = torch.arange(batch_size, device=device)
+            prev_states = traj_batch_first[batch_indices, prev_indices]  # (Batch, Dim)
+
+            # velocity = ||S* - S_{T-1}||
+            final_diff = s_star - prev_states
             velocity = torch.norm(final_diff, dim=1, keepdim=True)
         else:
             velocity = torch.zeros(batch_size, 1, device=device, dtype=dtype)
@@ -281,6 +290,6 @@ class StandardVipassana(BaseVipassana):
         v_ctx = torch.cat([dynamic_context, static_context], dim=1)  # (Batch, context_dim)
 
         # Trust score from fused context
-        trust_score = self.trust_head(v_ctx)  # (Batch, 1)
+        trust_score = self.trust_head(metrics)  # (Batch, 1)
 
         return v_ctx, trust_score
