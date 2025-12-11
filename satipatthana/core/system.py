@@ -183,7 +183,9 @@ class SatipatthanaSystem(nn.Module):
 
         # 2. Vipassana: Introspection (optional)
         if run_vipassana:
-            v_ctx, trust_score = self.vipassana(s_star, santana)
+            # Pass Vitakka probes for semantic feature computation
+            probes = self.samatha.vitakka.probes
+            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
         else:
             # Return dummy context and full trust
             context_dim = self.config.vipassana.vipassana.context_dim
@@ -314,8 +316,11 @@ class SatipatthanaSystem(nn.Module):
         # This allows Vipassana to compute gradients through its own parameters
         s_star = s_star_detached.clone().requires_grad_(True)
 
+        # Get probes for semantic feature computation
+        probes = self.samatha.vitakka.probes
+
         # Run Vipassana (trainable)
-        v_ctx, trust_score = self.vipassana(s_star, santana)
+        v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
 
         return {
             "s_star": s_star,
@@ -345,7 +350,8 @@ class SatipatthanaSystem(nn.Module):
 
         # Run Vipassana (frozen)
         with torch.no_grad():
-            v_ctx, trust_score = self.vipassana(s_star, santana)
+            probes = self.samatha.vitakka.probes
+            v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
 
         # Run TaskDecoder (trainable)
         s_and_ctx = torch.cat([s_star, v_ctx], dim=1)

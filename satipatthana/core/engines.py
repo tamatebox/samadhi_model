@@ -269,6 +269,7 @@ class VipassanaEngine(nn.Module):
         self,
         s_star: torch.Tensor,
         santana: SantanaLog,
+        probes: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Vipassana forward pass: Introspection.
@@ -279,6 +280,8 @@ class VipassanaEngine(nn.Module):
         Args:
             s_star: Converged state from Samatha (Batch, Dim)
             santana: SantanaLog containing thinking trajectory
+            probes: Probe vectors from Vitakka (N_probes, Dim), optional
+                    Used for computing semantic features (familiarity, ambiguity)
 
         Returns:
             v_ctx: Context vector (Batch, context_dim) - embedding of "doubt"
@@ -289,7 +292,7 @@ class VipassanaEngine(nn.Module):
         dtype = s_star.dtype
 
         # Run Vipassana analysis
-        v_ctx, trust_score = self.vipassana(s_star, santana)
+        v_ctx, trust_score = self.vipassana(s_star, santana, probes=probes)
 
         # Ensure trust_score is (Batch, 1) tensor
         # StandardVipassana now returns tensor directly
