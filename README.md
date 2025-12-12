@@ -224,6 +224,18 @@ It implements Buddhist psychology concepts as engineering modules:
 
 ---
 
+## Documentation
+
+| Document | Description |
+|:---|:---|
+| [training_strategy.md](docs/training_strategy.md) | Training Strategy & Pattern Selection (A-F) |
+| [workflow_guide.md](docs/workflow_guide.md) | Implementation Cookbook (Copy-Paste Code) |
+| [data_format.md](docs/data_format.md) | Data Format & VoidDataset Specification |
+| [specification_en.md](docs/specification_en.md) | Architecture Specification |
+| [theory_en.md](docs/theory_en.md) | Theoretical Foundations |
+
+---
+
 ## Notebook Demos
 
 | Notebook | Description |
