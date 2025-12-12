@@ -240,9 +240,9 @@ It implements Buddhist psychology concepts as engineering modules:
 
 | Notebook | Description |
 |:---|:---|
-| `mnist_demo.ipynb` | Visualizes "purification" of noisy MNIST digits |
-| `fraud_unsupervised_detection_explained.ipynb` | Anomaly detection with XAI |
-| `time_series_anomaly_detection.ipynb` | Time series anomaly detection |
+| `01_mnist_visual_convergence.ipynb` | Visualizes "purification" of noisy MNIST digits |
+| `02_trust_score_explained.ipynb` | Deep dive into Trust Score mechanics and visualization |
+| `03_fraud_detection_tutorial.ipynb` | **Full tutorial**: 4-Stage Curriculum + Pattern A (Isolation) strategy |
 
 ```bash
 uv pip install "jupyterlab>=3" && jupyter lab
